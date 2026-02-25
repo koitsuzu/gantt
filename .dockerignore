@@ -1,0 +1,11 @@
+node_modules
+client/node_modules
+client/dist
+server/node_modules
+server/data
+.git
+.gitignore
+.env
+.agent
+*.md
+test_*.js

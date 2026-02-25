@@ -1,0 +1,16 @@
+services:
+  gantt:
+    build: .
+    container_name: gantt-app
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - EDIT_PASSWORD=${EDIT_PASSWORD:-1234}
+    volumes:
+      - gantt-data:/app/server/data
+    restart: unless-stopped
+
+volumes:
+  gantt-data:
+    driver: local

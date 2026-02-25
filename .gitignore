@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+client/dist/
+
+# Environment variables (contains secrets)
+.env
+
+# Database files
+server/data/*.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test files
+test_*.js
+
+# Agent config
+.agent/

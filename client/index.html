@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專甘管 - 精準專案管理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=IBM+Plex+Sans+TC:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body class="editorial-theme">
+    <div id="app">
+        <!-- Top Navigation Bar -->
+        <nav class="app-nav">
+            <div class="nav-left">
+                <header class="brand">
+                    <h1>專甘管</h1>
+                    <p class="subtitle">PROJECT GANTT</p>
+                </header>
+            </div>
+
+            <div class="nav-right">
+                <div class="edit-mode-toggle">
+                    <div class="toggle-group">
+                        <span class="toggle-label">🔒 唯讀模式</span>
+                        <label class="switch">
+                            <input type="checkbox" id="edit-mode-check">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+                <button id="new-project-btn" class="btn-top-action">+ 專案</button>
+                <button id="import-project-btn" class="btn-top-action">📥 匯入專案</button>
+                <button id="settings-btn" class="btn-icon">⚙️</button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Main Tabs -->
+            <div class="main-tabs" id="main-tabs">
+                <button class="main-tab active" data-tab="projects">📋 專案</button>
+                <button class="main-tab" data-tab="announcements">📢 公告</button>
+                <button class="main-tab" data-tab="today">✅ 今日待辦</button>
+                <button class="main-tab" data-tab="delay">⚠️ DELAY</button>
+            </div>
+
+            <!-- Tab Content: Projects (default) -->
+            <div class="tab-content active" id="tab-projects">
+                <div class="project-overview" id="project-overview"></div>
+            </div>
+
+            <!-- Tab Content: Announcements -->
+            <div class="tab-content" id="tab-announcements">
+                <div id="announcements-container"></div>
+            </div>
+
+            <!-- Tab Content: Today's Todos -->
+            <div class="tab-content" id="tab-today">
+                <div id="today-container"></div>
+            </div>
+
+            <!-- Tab Content: Delay Details -->
+            <div class="tab-content" id="tab-delay">
+                <div id="delay-container"></div>
+            </div>
+
+            <!-- Toolbar with project selector + time scale -->
+            <div class="toolbar">
+                <div class="toolbar-project-selector">
+                    <span class="selector-label">切換專案</span>
+                    <ul id="projects" class="project-tabs"></ul>
+                </div>
+                <div class="toolbar-right-group">
+                    <div class="view-controls" id="view-controls">
+                        <button data-scale="hour">時</button>
+                        <button data-scale="day" class="active">日</button>
+                        <button data-scale="week">週</button>
+                        <button data-scale="month">月</button>
+                        <button data-scale="quarter">季</button>
+                        <button data-scale="year">年</button>
+                    </div>
+                    <div class="global-controls">
+                        <span class="control-label">顯示層級：</span>
+                        <button id="level-1-btn" class="btn-tool" title="僅顯示專案">1 階</button>
+                        <button id="level-2-btn" class="btn-tool" title="顯示至階段">2 階</button>
+                        <button id="level-3-btn" class="btn-tool" title="顯示至首層任務">3 階</button>
+                        <button id="level-4-btn" class="btn-tool" title="展開全部子任務">全部</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vertical Resize Handle -->
+            <div class="gantt-resizer" id="gantt-resizer">
+                <div class="gantt-resizer-line"></div>
+            </div>
+
+            <div class="gantt-container" id="gantt-chart">
+                <div class="gantt-header-sticky" id="gantt-time-scale"></div>
+                <div class="gantt-body" id="gantt-rows"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal">
+            <div id="modal-content"></div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
