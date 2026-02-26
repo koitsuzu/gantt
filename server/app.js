@@ -1,7 +1,11 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const os = require('os');
 const db = require('./db');
-require('dotenv').config();
+const { initAgent, handleChat, clearConversation, getActiveProvider, setProvider } = require('./agent');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,11 +21,14 @@ app.use((req, res, next) => {
 
 // === Edit Password Verification ===
 const EDIT_PASSWORD = process.env.EDIT_PASSWORD || '1234';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
 
 app.post('/api/verify-password', (req, res) => {
     const { password } = req.body;
-    if (password === EDIT_PASSWORD) {
-        res.json({ success: true });
+    if (password === ADMIN_PASSWORD) {
+        res.json({ success: true, role: 'admin' });
+    } else if (password === EDIT_PASSWORD) {
+        res.json({ success: true, role: 'edit' });
     } else {
         res.status(401).json({ success: false, error: '密碼錯誤' });
     }
@@ -76,7 +83,8 @@ app.get('/api/projects', (req, res) => {
     if (!userId) return res.status(400).json({ error: 'userId is required' });
 
     try {
-        const projects = db.prepare("SELECT * FROM projects WHERE user_id = ? AND status = 'active' ORDER BY end_date ASC").all(userId);
+        const condition = req.query.showAll === 'true' ? "status IN ('active', 'closed')" : "status = 'active'";
+        const projects = db.prepare(`SELECT * FROM projects WHERE user_id = ? AND ${condition} ORDER BY end_date ASC`).all(userId);
         res.json(projects);
     } catch (err) {
         console.error('Projects fetch error:', err);
@@ -91,7 +99,7 @@ app.get('/api/projects/summary', (req, res) => {
 
     try {
         const projects = db.prepare('SELECT * FROM projects WHERE user_id = ?').all(userId);
-        const summaries = projects.filter(p => p.status === 'active').map(project => {
+        const summaries = projects.filter(p => req.query.showAll === 'true' || p.status === 'active').map(project => {
             const stages = db.prepare('SELECT * FROM stages WHERE project_id = ? ORDER BY "order"').all(project.id);
 
             let totalTasks = 0;
@@ -130,6 +138,7 @@ app.get('/api/projects/summary', (req, res) => {
                 completedTasks,
                 investedDays,
                 status,
+                raw_status: project.status,
                 stages: stageStats
             };
         });
@@ -361,7 +370,8 @@ app.get('/api/all-projects-gantt', (req, res) => {
     if (!userId) return res.status(400).json({ error: 'userId is required' });
 
     try {
-        const projects = db.prepare("SELECT * FROM projects WHERE user_id = ? AND status = 'active' ORDER BY end_date ASC").all(userId);
+        const condition = req.query.showAll === 'true' ? "status IN ('active', 'closed')" : "status = 'active'";
+        const projects = db.prepare(`SELECT * FROM projects WHERE user_id = ? AND ${condition} ORDER BY end_date ASC`).all(userId);
         const result = projects.map(project => {
             const stages = db.prepare('SELECT * FROM stages WHERE project_id = ? ORDER BY "order"').all(project.id);
             const detailedStages = stages.map(stage => {
@@ -539,11 +549,87 @@ app.patch('/api/departments/:id', (req, res) => {
     }
 });
 
+// === Stage Templates API ===
+app.get('/api/stage-templates', (req, res) => {
+    try {
+        const templates = db.prepare('SELECT * FROM stage_templates ORDER BY created_at ASC').all();
+        const result = templates.map(t => {
+            const items = db.prepare('SELECT * FROM stage_template_items WHERE template_id = ? ORDER BY "order" ASC').all(t.id);
+            return { ...t, stages: items };
+        });
+        res.json(result);
+    } catch (err) {
+        console.error('Stage templates fetch error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/stage-templates', (req, res) => {
+    const { name, stages } = req.body;
+    if (!name || !stages || !Array.isArray(stages)) {
+        return res.status(400).json({ error: 'Missing name or stages' });
+    }
+    try {
+        const result = db.transaction(() => {
+            const info = db.prepare('INSERT INTO stage_templates (name) VALUES (?)').run(name);
+            const templateId = info.lastInsertRowid;
+            const insertItem = db.prepare('INSERT INTO stage_template_items (template_id, name, days, "order") VALUES (?, ?, ?, ?)');
+            stages.forEach((s, i) => insertItem.run(templateId, s.name, s.days || 1, i));
+            return templateId;
+        })();
+        const newTemplate = db.prepare('SELECT * FROM stage_templates WHERE id = ?').get(result);
+        const items = db.prepare('SELECT * FROM stage_template_items WHERE template_id = ? ORDER BY "order" ASC').all(result);
+        res.json({ success: true, template: { ...newTemplate, stages: items } });
+    } catch (err) {
+        console.error('Stage template create error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/stage-templates/:id', (req, res) => {
+    const { name, stages } = req.body;
+    if (!name || !stages || !Array.isArray(stages)) {
+        return res.status(400).json({ error: 'Missing name or stages' });
+    }
+    try {
+        db.transaction(() => {
+            db.prepare('UPDATE stage_templates SET name = ? WHERE id = ?').run(name, req.params.id);
+            db.prepare('DELETE FROM stage_template_items WHERE template_id = ?').run(req.params.id);
+            const insertItem = db.prepare('INSERT INTO stage_template_items (template_id, name, days, "order") VALUES (?, ?, ?, ?)');
+            stages.forEach((s, i) => insertItem.run(req.params.id, s.name, s.days || 1, i));
+        })();
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Stage template update error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/stage-templates/:id', (req, res) => {
+    try {
+        db.prepare('DELETE FROM stage_templates WHERE id = ?').run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Stage template delete error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // === Start Server ===
 // Archive project (soft delete)
 app.patch('/api/projects/:id/archive', (req, res) => {
     try {
         db.prepare("UPDATE projects SET status = 'closed' WHERE id = ?").run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Restore project from archive
+app.patch('/api/projects/:id/unarchive', (req, res) => {
+    try {
+        db.prepare("UPDATE projects SET status = 'active' WHERE id = ?").run(req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -998,9 +1084,6 @@ app.post('/api/projects/import', (req, res) => {
 
 // === EXPORT: PDF (via Python reportlab) ===
 const { execSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
 
 app.get('/api/projects/:id/export/pdf', (req, res) => {
     try {
@@ -1047,6 +1130,44 @@ app.get('/api/projects/:id/export/pdf', (req, res) => {
         console.error('PDF export error:', err);
         res.status(500).json({ error: err.message });
     }
+});
+
+
+// === AI Agent Chat API ===
+initAgent();
+
+app.get('/api/agent/provider', (req, res) => {
+    res.json({ provider: getActiveProvider() });
+});
+
+app.post('/api/agent/provider', (req, res) => {
+    try {
+        const { provider } = req.body;
+        if (!provider) return res.status(400).json({ error: 'provider is required' });
+        setProvider(provider);
+        res.json({ success: true, provider: getActiveProvider() });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+app.post('/api/agent/chat', async (req, res) => {
+    const { message, sessionId = 'default' } = req.body;
+    if (!message) return res.status(400).json({ error: 'message is required' });
+
+    try {
+        const result = await handleChat(db, sessionId, message);
+        res.json(result);
+    } catch (err) {
+        console.error('Agent chat error:', err);
+        res.status(500).json({ error: 'Agent 回覆失敗：' + err.message });
+    }
+});
+
+app.post('/api/agent/clear', (req, res) => {
+    const { sessionId = 'default' } = req.body;
+    clearConversation(sessionId);
+    res.json({ success: true });
 });
 
 // === Serve static frontend (production / Docker) ===

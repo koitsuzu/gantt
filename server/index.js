@@ -381,6 +381,72 @@ app.get('/api/agent/loading', (req, res) => {
     }
 });
 
+// === Stage Templates API ===
+app.get('/api/stage-templates', (req, res) => {
+    try {
+        const templates = db.prepare('SELECT * FROM stage_templates ORDER BY created_at ASC').all();
+        const result = templates.map(t => {
+            const items = db.prepare('SELECT * FROM stage_template_items WHERE template_id = ? ORDER BY "order" ASC').all(t.id);
+            return { ...t, stages: items };
+        });
+        res.json(result);
+    } catch (err) {
+        console.error('Stage templates fetch error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/stage-templates', (req, res) => {
+    const { name, stages } = req.body;
+    if (!name || !stages || !Array.isArray(stages)) {
+        return res.status(400).json({ error: 'Missing name or stages' });
+    }
+    try {
+        const result = db.transaction(() => {
+            const info = db.prepare('INSERT INTO stage_templates (name) VALUES (?)').run(name);
+            const templateId = info.lastInsertRowid;
+            const insertItem = db.prepare('INSERT INTO stage_template_items (template_id, name, days, "order") VALUES (?, ?, ?, ?)');
+            stages.forEach((s, i) => insertItem.run(templateId, s.name, s.days || 1, i));
+            return templateId;
+        })();
+        const newTemplate = db.prepare('SELECT * FROM stage_templates WHERE id = ?').get(result);
+        const items = db.prepare('SELECT * FROM stage_template_items WHERE template_id = ? ORDER BY "order" ASC').all(result);
+        res.json({ success: true, template: { ...newTemplate, stages: items } });
+    } catch (err) {
+        console.error('Stage template create error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/stage-templates/:id', (req, res) => {
+    const { name, stages } = req.body;
+    if (!name || !stages || !Array.isArray(stages)) {
+        return res.status(400).json({ error: 'Missing name or stages' });
+    }
+    try {
+        db.transaction(() => {
+            db.prepare('UPDATE stage_templates SET name = ? WHERE id = ?').run(name, req.params.id);
+            db.prepare('DELETE FROM stage_template_items WHERE template_id = ?').run(req.params.id);
+            const insertItem = db.prepare('INSERT INTO stage_template_items (template_id, name, days, "order") VALUES (?, ?, ?, ?)');
+            stages.forEach((s, i) => insertItem.run(req.params.id, s.name, s.days || 1, i));
+        })();
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Stage template update error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/stage-templates/:id', (req, res) => {
+    try {
+        db.prepare('DELETE FROM stage_templates WHERE id = ?').run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Stage template delete error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // === Start Server ===
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);

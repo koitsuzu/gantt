@@ -1,6 +1,7 @@
 import './style.css'
 import { GanttRenderer, GanttItem } from './renderer';
 import { GanttInteraction } from './interaction';
+import { AgentChat } from './agent-chat';
 import { startOfDay, addDays, format, addHours } from 'date-fns';
 
 const API_URL = 'http://localhost:3000/api';
@@ -11,11 +12,14 @@ class GanttApp {
     private currentUserId = 1;
     private collapsedStages: Set<number> = new Set();
     private editingDeptId: number | null = null;
+    private editingTemplateId: number | null = null;
     private departments: any[] = [];
+    private stageTemplates: any[] = [];
     private projects: any[] = [];
     private allProjectsData: any[] = [];
     private currentProjectId: number | null = null;
     private isEditMode = false;
+    private isAdminMode = false;
     private activeTab = 'projects';
 
     constructor() {
@@ -28,6 +32,7 @@ class GanttApp {
 
     async init() {
         await this.loadDepartments();
+        await this.loadStageTemplates();
         await this.loadAllProjectsGantt();
         await this.loadProjectSummary();
     }
@@ -42,9 +47,21 @@ class GanttApp {
         }
     }
 
+    async loadStageTemplates() {
+        try {
+            const res = await fetch(`${API_URL}/stage-templates`);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            this.stageTemplates = await res.json();
+        } catch (err) {
+            console.error('Stage Templates Load Error:', err);
+            this.stageTemplates = [];
+        }
+    }
+
     async loadAllProjectsGantt() {
         try {
-            const res = await fetch(`${API_URL}/all-projects-gantt?userId=${this.currentUserId}`);
+            const url = `${API_URL}/all-projects-gantt?userId=${this.currentUserId}${this.isAdminMode ? '&showAll=true' : ''}`;
+            const res = await fetch(url);
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             this.allProjectsData = await res.json();
             this.projects = this.allProjectsData;
@@ -57,9 +74,16 @@ class GanttApp {
 
     async loadProjectSummary() {
         try {
-            const res = await fetch(`${API_URL}/projects/summary?userId=${this.currentUserId}`);
+            const url = `${API_URL}/projects/summary?userId=${this.currentUserId}${this.isAdminMode ? '&showAll=true' : ''}`;
+            const res = await fetch(url);
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             const summaries = await res.json();
+            // Sort by end_date (nearest first)
+            summaries.sort((a: any, b: any) => {
+                if (!a.end_date) return 1;
+                if (!b.end_date) return -1;
+                return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+            });
             this.renderOverview(summaries);
         } catch (err) {
             console.error('Summary Load Error:', err);
@@ -71,7 +95,7 @@ class GanttApp {
         if (!list) return;
 
         const activeProjects = this.allProjectsData
-            .filter(p => p.status === 'active')
+            .filter(p => this.isAdminMode ? true : p.status === 'active')
             .sort((a, b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime());
 
         if (activeProjects.length === 0) {
@@ -113,16 +137,23 @@ class GanttApp {
             <div class="overview-cards">
                 ${summaries.map(p => {
             const pct = p.totalTasks > 0 ? Math.round((p.completedTasks / p.totalTasks) * 100) : 0;
-            const statusClass = p.status === '已完成' ? 'done' : p.status === '未開始' ? 'idle' : p.status === '進行中' ? 'active' : 'empty';
+            let displayStatus = p.status;
+            let statusClass = p.status === '已完成' ? 'done' : p.status === '未開始' ? 'idle' : p.status === '進行中' ? 'active' : 'empty';
+
+            if (p.raw_status === 'closed') {
+                displayStatus = '已封存';
+                statusClass = 'closed';
+            }
+
             const dateRange = p.start_date && p.end_date
                 ? `${format(new Date(p.start_date), 'M/d')} ~ ${format(new Date(p.end_date), 'M/d')}`
                 : '未設定';
 
             return `
-                        <div class="overview-card" data-id="${p.id}">
+                        <div class="overview-card ${p.raw_status === 'closed' ? 'card-closed' : ''}" data-id="${p.id}">
                             <div class="ov-header">
                                 <h3>${p.name}</h3>
-                                <span class="ov-badge ${statusClass}">${p.status}</span>
+                                <span class="ov-badge ${statusClass}">${displayStatus}</span>
                             </div>
                             <div class="ov-progress-bar">
                                 <div class="ov-progress-fill" style="width: ${pct}%"></div>
@@ -154,6 +185,17 @@ class GanttApp {
                                         <button class="btn-export-opt" data-export="json" data-project-id="${p.id}">📋 JSON 模板</button>
                                     </div>
                                 </div>
+                                ${this.isAdminMode ? `
+                                <div class="ov-export-dropdown">
+                                    <button class="btn-admin-toggle" data-id="admin-${p.id}">🛡️ 管理</button>
+                                    <div class="ov-dropdown-menu dropdown-right" id="dropdown-admin-${p.id}">
+                                        ${p.raw_status === 'closed'
+                        ? `<button class="btn-export-opt btn-unarchive" style="color:var(--text-main)" data-project-id="${p.id}">👁️ 解除隱藏</button>`
+                        : ''}
+                                        <button class="btn-export-opt btn-hard-delete" style="color:var(--danger)" data-project-id="${p.id}">🗑️ 徹底刪除專案</button>
+                                    </div>
+                                </div>
+                                ` : ''}
                             </div>
                         </div>
                     `;
@@ -162,11 +204,11 @@ class GanttApp {
         `;
 
         // Dropdown toggle logic
-        document.querySelectorAll('.btn-download-toggle').forEach(btn => {
+        document.querySelectorAll('.btn-download-toggle, .btn-admin-toggle').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const projectId = (btn as HTMLElement).dataset.id;
-                const menu = document.getElementById(`dropdown-${projectId}`);
+                const btnId = (btn as HTMLElement).dataset.id;
+                const menu = document.getElementById(`dropdown-${btnId}`);
 
                 // Close other open menus
                 document.querySelectorAll('.ov-dropdown-menu').forEach(m => {
@@ -178,7 +220,7 @@ class GanttApp {
         });
 
         // Export option click handlers
-        document.querySelectorAll('.btn-export-opt').forEach(btn => {
+        document.querySelectorAll('.btn-export-opt:not(.btn-hard-delete):not(.btn-unarchive)').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const target = e.currentTarget as HTMLElement;
@@ -186,6 +228,40 @@ class GanttApp {
                 const projectId = target.dataset.projectId;
                 if (exportType && projectId) {
                     window.open(`${API_URL}/projects/${projectId}/export/${exportType}`, '_blank');
+                }
+                target.closest('.ov-dropdown-menu')?.classList.remove('show');
+            });
+        });
+
+        // Delete project
+        document.querySelectorAll('.btn-hard-delete').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                const projectId = target.dataset.projectId;
+                if (confirm('此操作將永久刪除專案與其所有資料，確定嗎？')) {
+                    try {
+                        await fetch(`${API_URL}/projects/${projectId}`, { method: 'DELETE' });
+                        this.init(); // Reload all data
+                    } catch (err) {
+                        alert('刪除失敗');
+                    }
+                }
+                target.closest('.ov-dropdown-menu')?.classList.remove('show');
+            });
+        });
+
+        // Unarchive project
+        document.querySelectorAll('.btn-unarchive').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                const projectId = target.dataset.projectId;
+                try {
+                    await fetch(`${API_URL}/projects/${projectId}/unarchive`, { method: 'PATCH' });
+                    this.init(); // Reload all data
+                } catch (err) {
+                    alert('解除隱藏失敗');
                 }
                 target.closest('.ov-dropdown-menu')?.classList.remove('show');
             });
@@ -753,9 +829,11 @@ class GanttApp {
         });
 
         const editToggle = document.getElementById('edit-mode-check') as HTMLInputElement;
+        const toggleLabel = editToggle.closest('.toggle-group')?.querySelector('.toggle-label');
+
         editToggle.addEventListener('change', async () => {
             if (editToggle.checked) {
-                const pass = prompt('請輸入編輯密碼：');
+                const pass = prompt('請輸入密碼：');
                 if (!pass) { editToggle.checked = false; return; }
                 try {
                     const res = await fetch(`${API_URL}/verify-password`, {
@@ -764,9 +842,20 @@ class GanttApp {
                         body: JSON.stringify({ password: pass })
                     });
                     if (res.ok) {
+                        const data = await res.json();
                         this.isEditMode = true;
+                        this.isAdminMode = data.role === 'admin';
                         document.body.classList.add('is-editing');
+                        if (this.isAdminMode) {
+                            document.body.classList.add('is-admin');
+                            if (toggleLabel) toggleLabel.textContent = '🛡️ 管理員模式';
+                        } else {
+                            if (toggleLabel) toggleLabel.textContent = '🔓 編輯模式';
+                        }
                         this.interaction.setEnabled(true);
+                        // Reload data to potentially get archived projects in admin mode
+                        this.loadAllProjectsGantt();
+                        this.loadProjectSummary();
                     } else {
                         alert('密碼錯誤！');
                         editToggle.checked = false;
@@ -777,8 +866,13 @@ class GanttApp {
                 }
             } else {
                 this.isEditMode = false;
-                document.body.classList.remove('is-editing');
+                this.isAdminMode = false;
+                document.body.classList.remove('is-editing', 'is-admin');
+                if (toggleLabel) toggleLabel.textContent = '🔒 唯讀模式';
                 this.interaction.setEnabled(false);
+                // Reload data to hide archived projects
+                this.loadAllProjectsGantt();
+                this.loadProjectSummary();
             }
         });
 
@@ -1060,12 +1154,16 @@ class GanttApp {
         });
     }
 
-    async showSettings() {
+    async showSettings(initialTab = 'depts') {
         const overlay = document.getElementById('modal-overlay')!;
+        const modal = overlay.querySelector('.modal')!;
         const content = document.getElementById('modal-content')!;
+
         overlay.classList.remove('hidden');
+        modal.classList.add('modal-lg');
 
         const renderDepts = () => {
+            if (this.departments.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">尚無部門</p>';
             return this.departments.map(d => `
                 <div class="dept-item-wrapper" data-id="${d.id}">
                     <div class="dept-item-content">
@@ -1081,120 +1179,294 @@ class GanttApp {
             `).join('');
         };
 
-        content.innerHTML = `
-            <div class="settings-container">
-                <div class="settings-header">
-                    <h2>部門與任務設定</h2>
-                </div>
-                <div class="dept-form">
-                    <h3>新增部門</h3>
-                    <div class="form-group">
-                        <label>部門名稱</label>
-                        <input type="text" id="new-dept-name" placeholder="例如：研發部">
+        const renderTemplates = () => {
+            if (this.stageTemplates.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">尚無範本</p>';
+            return this.stageTemplates.map(t => `
+                <div class="dept-item-wrapper" data-tmpl-id="${t.id}">
+                    <div class="dept-item-content" style="cursor:pointer">
+                        <div class="dept-details">
+                            <h4>${t.name}</h4>
+                            <p>${t.stages.map((s: any) => `${s.name}(${s.days}天)`).join(' → ')}</p>
+                        </div>
+                        <span class="dept-edit-hint">點擊編輯</span>
                     </div>
-                    <div class="form-group">
-                        <label>代表顏色</label>
-                        <div class="color-input-wrapper">
-                            <input type="color" id="new-dept-color" value="#3b82f6">
+                    <button class="dept-item-delete" data-tmpl-id="${t.id}">刪除</button>
+                </div>
+            `).join('');
+        };
+
+        content.innerHTML = `
+            <button class="btn-close" id="close-settings-btn">&times;</button>
+            <div class="settings-container" style="padding: 1rem 0.5rem">
+                <div class="settings-header" style="margin-bottom: 2rem">
+                    <h2>系統設定</h2>
+                </div>
+                
+                <div class="settings-tabs">
+                    <button class="settings-tab ${initialTab === 'depts' ? 'active' : ''}" data-tab="depts">部門與預設任務</button>
+                    <button class="settings-tab ${initialTab === 'templates' ? 'active' : ''}" data-tab="templates">專案階段範本</button>
+                    <button class="settings-tab ${initialTab === 'general' ? 'active' : ''}" data-tab="general">一般設定</button>
+                </div>
+
+                <!-- Tab: Departments -->
+                <div class="settings-tab-panel ${initialTab === 'depts' ? 'active' : ''}" id="tab-depts">
+                    <div class="settings-grid">
+                        <div class="settings-column">
+                            <div class="settings-section">
+                                <div class="section-header">
+                                    <h3 id="dept-form-title">${this.editingDeptId ? '編輯部門' : '新增部門'}</h3>
+                                </div>
+                                <div class="dept-form" style="margin-bottom:0">
+                                    <div class="form-group">
+                                        <label>部門名稱</label>
+                                        <input type="text" id="new-dept-name" placeholder="例如：研發部">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>代表顏色</label>
+                                        <div class="color-input-wrapper">
+                                            <input type="color" id="new-dept-color" value="#3b82f6">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>預設任務 (每行一個)</label>
+                                        <textarea id="new-dept-tasks" placeholder="任務 A\n任務 B" rows="5"></textarea>
+                                    </div>
+                                    <div style="display:flex;gap:12px;margin-top:8px">
+                                        <button class="btn-primary" id="save-dept-btn" style="flex:1">儲存部門</button>
+                                        <button class="btn-secondary" id="cancel-dept-btn" style="display:${this.editingDeptId ? 'inline-flex' : 'none'}">取消</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-column">
+                            <div class="settings-section">
+                                <div class="section-header">
+                                    <h3>現有部門列表</h3>
+                                </div>
+                                <div class="dept-items">${renderDepts()}</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>預設任務 (每行一個)</label>
-                        <textarea id="new-dept-tasks" placeholder="任務 A\n任務 B"></textarea>
-                    </div>
-                    <button class="btn-primary" id="save-dept-btn">儲存部門</button>
                 </div>
-                <div class="dept-list">
-                    <div class="settings-header" style="margin-top:2rem">
-                        <h3>現有部門</h3>
+
+                <!-- Tab: Templates -->
+                <div class="settings-tab-panel ${initialTab === 'templates' ? 'active' : ''}" id="tab-templates">
+                    <div class="settings-grid">
+                        <div class="settings-column">
+                            <div class="settings-section">
+                                <div class="section-header">
+                                    <h3 id="tmpl-form-title">${this.editingTemplateId ? '編輯階段範本' : '新增階段範本'}</h3>
+                                </div>
+                                <div id="tmpl-form-wrapper" class="dept-form" style="margin-bottom:0">
+                                    <div class="form-group">
+                                        <label>範本名稱</label>
+                                        <input type="text" id="tmpl-name-input" placeholder="例如：標準開發流程">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>階段設定</label>
+                                        <div id="tmpl-stages-container"></div>
+                                        <button type="button" id="add-tmpl-stage-row" class="btn-tool" style="margin-top:8px;width:100%">＋ 新增階段</button>
+                                    </div>
+                                    <div style="display:flex;gap:12px;margin-top:16px">
+                                        <button class="btn-primary" id="save-tmpl-btn" style="flex:1">儲存範本</button>
+                                        <button class="btn-secondary" id="cancel-tmpl-btn" style="display:${this.editingTemplateId ? 'inline-flex' : 'none'}">取消</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-column">
+                            <div class="settings-section">
+                                <div class="section-header">
+                                    <h3>現有範本列表</h3>
+                                </div>
+                                <div id="tmpl-items" class="dept-items">${renderTemplates()}</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="dept-items">${renderDepts()}</div>
                 </div>
-                <div class="modal-actions" style="margin-top: 2rem;">
-                    <button class="btn-secondary" id="close-settings">關閉</button>
+
+                <!-- Tab: General (Placeholder) -->
+                <div class="settings-tab-panel ${initialTab === 'general' ? 'active' : ''}" id="tab-general">
+                    <div class="settings-section">
+                        <div class="section-header"><h3>一般設定</h3></div>
+                        <p style="color:var(--text-secondary); margin-bottom: 1.5rem">這裡將來可以放置使用者權限、公司資訊或其他全域設定。</p>
+                        <div class="form-group" style="max-width: 400px">
+                            <label>預設語系</label>
+                            <select class="premium-select" style="width:100%; border:1px solid var(--border); padding:8px; border-radius:8px">
+                                <option>繁體中文 (台灣)</option>
+                                <option disabled>English (Coming Soon)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
 
-        document.getElementById('close-settings')?.addEventListener('click', () => {
-            overlay.classList.add('hidden');
-            this.editingDeptId = null;
+        // === Tab Switching Logic ===
+        content.querySelectorAll('.settings-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = (btn as HTMLElement).dataset.tab!;
+                content.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', (b as HTMLElement).dataset.tab === target));
+                content.querySelectorAll('.settings-tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${target}`));
+
+                // Clear state when switching tabs to avoid confusion
+                if (target !== 'depts') this.editingDeptId = null;
+                if (target !== 'templates') this.editingTemplateId = null;
+            });
         });
 
-        document.getElementById('save-dept-btn')?.addEventListener('click', async () => {
-            const nameEl = document.getElementById('new-dept-name') as HTMLInputElement;
-            const colorEl = document.getElementById('new-dept-color') as HTMLInputElement;
-            const tasksEl = document.getElementById('new-dept-tasks') as HTMLTextAreaElement;
+        // === Event Listeners (Commonly Shared or Tab-Specific) ===
 
-            const name = nameEl.value.trim();
-            const color = colorEl.value;
-            const tasks = tasksEl.value.split('\n').map(t => t.trim()).filter(t => t);
+        document.getElementById('close-settings-btn')?.addEventListener('click', () => {
+            overlay.classList.add('hidden');
+            modal.classList.remove('modal-lg');
+            this.editingDeptId = null;
+            this.editingTemplateId = null;
+        });
+
+        // --- Department Handlers ---
+        const cancelDeptEdit = () => {
+            this.editingDeptId = null;
+            this.showSettings('depts');
+        };
+
+        document.getElementById('cancel-dept-btn')?.addEventListener('click', cancelDeptEdit);
+
+        if (this.editingDeptId) {
+            const dept = this.departments.find(d => d.id === this.editingDeptId);
+            if (dept) {
+                (document.getElementById('new-dept-name') as HTMLInputElement).value = dept.name;
+                (document.getElementById('new-dept-color') as HTMLInputElement).value = dept.color;
+                (document.getElementById('new-dept-tasks') as HTMLTextAreaElement).value = dept.tasks.join('\n');
+            }
+        }
+
+        document.getElementById('save-dept-btn')?.addEventListener('click', async () => {
+            const name = (document.getElementById('new-dept-name') as HTMLInputElement).value.trim();
+            const color = (document.getElementById('new-dept-color') as HTMLInputElement).value;
+            const tasks = (document.getElementById('new-dept-tasks') as HTMLTextAreaElement).value.split('\n').map(t => t.trim()).filter(t => t);
 
             if (!name) return alert('請輸入部門名稱');
 
             try {
                 const url = this.editingDeptId ? `${API_URL}/departments/${this.editingDeptId}` : `${API_URL}/departments`;
                 const method = this.editingDeptId ? 'PATCH' : 'POST';
-
                 const res = await fetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, color, tasks })
                 });
 
-                if (!res.ok) {
-                    const errData = await res.json();
-                    throw new Error(errData.error || '儲存部門失敗');
-                }
-
+                if (!res.ok) throw new Error('儲存部門失敗');
                 this.editingDeptId = null;
                 await this.loadDepartments();
-                this.showSettings(); // Refresh list and form
+                this.showSettings('depts');
                 this.refreshGantt();
-            } catch (err) {
-                alert((err as Error).message);
+            } catch (err) { alert((err as Error).message); }
+        });
+
+        // --- Template Handlers ---
+        const tmplContainer = document.getElementById('tmpl-stages-container')!;
+        const buildTmplStageRow = (name = '', days = 7) => {
+            const div = document.createElement('div');
+            div.className = 'stage-field';
+            div.style.marginBottom = '8px';
+            div.innerHTML = `
+                <input type="text" value="${name}" placeholder="階段名稱" class="stage-name-input" style="flex:2">
+                <input type="number" value="${days}" class="stage-days-input" min="1" style="flex:1">
+                <span style="font-size:0.8rem;color:var(--text-secondary)">天</span>
+                <button type="button" class="btn-remove-stage" title="移除">✕</button>
+            `;
+            return div;
+        };
+
+        if (this.editingTemplateId) {
+            const tmpl = this.stageTemplates.find(t => t.id === this.editingTemplateId);
+            if (tmpl) {
+                (document.getElementById('tmpl-name-input') as HTMLInputElement).value = tmpl.name;
+                tmpl.stages.forEach((s: any) => tmplContainer.appendChild(buildTmplStageRow(s.name, s.days)));
+            }
+        } else if (tmplContainer) {
+            tmplContainer.appendChild(buildTmplStageRow());
+        }
+
+        document.getElementById('add-tmpl-stage-row')?.addEventListener('click', () => tmplContainer.appendChild(buildTmplStageRow()));
+
+        tmplContainer?.addEventListener('click', (e) => {
+            const btn = (e.target as HTMLElement).closest('.btn-remove-stage');
+            if (btn && tmplContainer.querySelectorAll('.stage-field').length > 1) {
+                btn.closest('.stage-field')?.remove();
+            } else if (btn) {
+                alert('至少需保留一個階段');
             }
         });
 
-        // Edit handlers (click on content)
+        document.getElementById('save-tmpl-btn')?.addEventListener('click', async () => {
+            const tmplName = (document.getElementById('tmpl-name-input') as HTMLInputElement).value.trim();
+            if (!tmplName) return alert('請輸入範本名稱');
+
+            const stages: any[] = [];
+            tmplContainer.querySelectorAll('.stage-field').forEach(field => {
+                const n = (field.querySelector('.stage-name-input') as HTMLInputElement).value.trim();
+                const d = parseInt((field.querySelector('.stage-days-input') as HTMLInputElement).value) || 1;
+                if (n) stages.push({ name: n, days: d });
+            });
+            if (stages.length === 0) return alert('請至少新增一個階段');
+
+            try {
+                const url = this.editingTemplateId ? `${API_URL}/stage-templates/${this.editingTemplateId}` : `${API_URL}/stage-templates`;
+                const method = this.editingTemplateId ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: tmplName, stages })
+                });
+                if (!res.ok) throw new Error('儲存範本失敗');
+                this.editingTemplateId = null;
+                await this.loadStageTemplates();
+                this.showSettings('templates');
+            } catch (err) { alert((err as Error).message); }
+        });
+
+        document.getElementById('cancel-tmpl-btn')?.addEventListener('click', () => {
+            this.editingTemplateId = null;
+            this.showSettings('templates');
+        });
+
+        // Edit/Delete handlers for both tabs
         content.querySelectorAll('.dept-item-content').forEach(item => {
-            item.addEventListener('click', (e) => {
-                const wrapper = (e.currentTarget as HTMLElement).closest('.dept-item-wrapper') as HTMLElement;
-                const id = parseInt(wrapper.dataset.id!);
-                const dept = this.departments.find(d => d.id === id);
-                if (dept) {
-                    this.editingDeptId = id;
-                    (document.getElementById('new-dept-name') as HTMLInputElement).value = dept.name;
-                    (document.getElementById('new-dept-color') as HTMLInputElement).value = dept.color;
-                    (document.getElementById('new-dept-tasks') as HTMLTextAreaElement).value = dept.tasks.join('\n');
-
-                    const btn = document.getElementById('save-dept-btn') as HTMLButtonElement;
-                    btn.textContent = '更新部門資料';
-                    btn.style.background = 'var(--accent)';
-
-                    document.querySelector('.dept-form')?.classList.add('editing-mode');
-                    document.getElementById('new-dept-name')?.focus();
+            item.addEventListener('click', () => {
+                const wrapper = item.closest('.dept-item-wrapper') as HTMLElement;
+                if (wrapper.dataset.id) {
+                    this.editingDeptId = parseInt(wrapper.dataset.id!);
+                    this.showSettings('depts');
+                } else if (wrapper.dataset.tmplId) {
+                    this.editingTemplateId = parseInt(wrapper.dataset.tmplId!);
+                    this.showSettings('templates');
                 }
             });
         });
 
-        // Delete handlers (click on revealed delete button)
         content.querySelectorAll('.dept-item-delete').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const id = (e.currentTarget as HTMLElement).dataset.id;
-                if (!confirm('確定要刪除此部門嗎？')) return;
+                const wrapper = (e.currentTarget as HTMLElement).closest('.dept-item-wrapper') as HTMLElement;
+                const id = wrapper.dataset.id || wrapper.dataset.tmplId;
+                const isTmpl = !!wrapper.dataset.tmplId;
+                if (!confirm(`確定要刪除此${isTmpl ? '範本' : '部門'}嗎？`)) return;
+
                 try {
-                    const res = await fetch(`${API_URL}/departments/${id}`, { method: 'DELETE' });
+                    const url = isTmpl ? `${API_URL}/stage-templates/${id}` : `${API_URL}/departments/${id}`;
+                    const res = await fetch(url, { method: 'DELETE' });
                     if (!res.ok) throw new Error('刪除失敗');
-                    await this.loadDepartments();
-                    this.showSettings();
-                } catch (err) {
-                    alert((err as Error).message);
-                }
+                    if (isTmpl) await this.loadStageTemplates();
+                    else await this.loadDepartments();
+                    this.showSettings(isTmpl ? 'templates' : 'depts');
+                } catch (err) { alert((err as Error).message); }
             });
         });
     }
+
 
     // Recursively find a task by ID in the allProjectsData tree
     private findTaskById(taskId: number): any | null {
@@ -1483,6 +1755,30 @@ class GanttApp {
         const today = format(new Date(), 'yyyy-MM-dd');
         const defaultEnd = format(addDays(new Date(), 30), 'yyyy-MM-dd');
 
+        // Build template options for the select
+        const templateOptions = this.stageTemplates.map(t =>
+            `<option value="${t.id}">${t.name}</option>`
+        ).join('');
+        const hasTemplates = this.stageTemplates.length > 0;
+
+        // Stage fields renderer (used for initial render and when switching templates)
+        const buildStageFields = (stages: { name: string, days: number }[]) =>
+            stages.map(s => `
+                <div class="stage-field">
+                    <input type="text" value="${s.name}" class="stage-name-input">
+                    <input type="number" value="${s.days}" class="stage-days-input" min="1">
+                    <span>天</span>
+                    <button type="button" class="btn-remove-stage" title="移除此階段">✕</button>
+                </div>
+            `).join('');
+
+        // Default stages when no template available
+        const fallbackStages = [
+            { name: '需求確認', days: 3 }, { name: '規格定義', days: 5 },
+            { name: '執行', days: 10 }, { name: '測試', days: 5 }, { name: '結案', days: 2 }
+        ];
+        const initialStages = hasTemplates ? this.stageTemplates[0].stages.map((s: any) => ({ name: s.name, days: s.days })) : fallbackStages;
+
         content.innerHTML = `
             <button class="btn-close" id="close-new-project">&times;</button>
             <h3>建立新專案</h3>
@@ -1502,32 +1798,27 @@ class GanttApp {
             </div>
             <p id="days-summary" class="modal-range-hint"></p>
             <div class="stages-input">
-                <p class="section-title" style="margin-bottom:12px">設定階段名稱與天數</p>
-                <div class="stage-field">
-                    <input type="text" value="需求確認" class="stage-name-input">
-                    <input type="number" value="3" class="stage-days-input">
-                    <span>天</span>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <p class="section-title" style="margin:0">設定階段名稱與天數</p>
+                    ${hasTemplates ? `
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <label style="font-size:0.8rem;color:var(--text-secondary)">套用範本：</label>
+                        <div class="custom-select" id="template-custom-select">
+                            <div class="custom-select-trigger">
+                                <span class="custom-select-text">${hasTemplates ? this.stageTemplates[0].name : '──自訂──'}</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="custom-options">
+                                <div class="custom-option ${!hasTemplates ? 'active' : ''}" data-value="">──自訂──</div>
+                                ${this.stageTemplates.map(t => `<div class="custom-option ${hasTemplates && t.id === this.stageTemplates[0].id ? 'active' : ''}" data-value="${t.id}">${t.name}</div>`).join('')}
+                            </div>
+                        </div>
+                    </div>` : `<span style="font-size:0.75rem;color:var(--text-secondary)">尚無範本（可在設定中新增）</span>`}
                 </div>
-                <div class="stage-field">
-                    <input type="text" value="規格定義" class="stage-name-input">
-                    <input type="number" value="5" class="stage-days-input">
-                    <span>天</span>
+                <div id="stage-fields-container">
+                    ${buildStageFields(initialStages)}
                 </div>
-                <div class="stage-field">
-                    <input type="text" value="執行" class="stage-name-input">
-                    <input type="number" value="10" class="stage-days-input">
-                    <span>天</span>
-                </div>
-                <div class="stage-field">
-                    <input type="text" value="測試" class="stage-name-input">
-                    <input type="number" value="5" class="stage-days-input">
-                    <span>天</span>
-                </div>
-                <div class="stage-field">
-                    <input type="text" value="結案" class="stage-name-input">
-                    <input type="number" value="2" class="stage-days-input">
-                    <span>天</span>
-                </div>
+                <button type="button" id="add-stage-row" class="btn-tool" style="margin-top:8px;width:100%;font-size:0.85rem">＋ 新增階段</button>
             </div>
             <div class="modal-actions">
                 <button id="submit-project" class="btn-primary">建立專案</button>
@@ -1536,13 +1827,15 @@ class GanttApp {
 
         modal.classList.remove('hidden');
 
+        const container = document.getElementById('stage-fields-container')!;
+
         const updateSummary = () => {
             const startVal = (document.getElementById('p-start') as HTMLInputElement).value;
             const endVal = (document.getElementById('p-end') as HTMLInputElement).value;
             const summaryEl = document.getElementById('days-summary');
             if (!summaryEl || !startVal || !endVal) return;
 
-            const totalDays = Array.from(document.querySelectorAll('.stage-days-input'))
+            const totalDays = Array.from(container.querySelectorAll('.stage-days-input'))
                 .reduce((sum, inp) => sum + (parseInt((inp as HTMLInputElement).value) || 0), 0);
             const availDays = Math.ceil((new Date(endVal).getTime() - new Date(startVal).getTime()) / 86400000);
 
@@ -1557,12 +1850,86 @@ class GanttApp {
             }
         };
 
+        // Delegate: listen for days changes inside container
+        container.addEventListener('input', updateSummary);
+
+        // Delegate: remove stage row
+        container.addEventListener('click', (e) => {
+            const btn = (e.target as HTMLElement).closest('.btn-remove-stage');
+            if (btn) {
+                const field = btn.closest('.stage-field');
+                if (field && container.querySelectorAll('.stage-field').length > 1) {
+                    field.remove();
+                    updateSummary();
+                } else {
+                    alert('至少需保留一個階段');
+                }
+            }
+        });
+
+        // Add stage row
+        document.getElementById('add-stage-row')?.addEventListener('click', () => {
+            const newField = document.createElement('div');
+            newField.className = 'stage-field';
+            newField.innerHTML = `
+                <input type="text" value="" placeholder="階段名稱" class="stage-name-input">
+                <input type="number" value="7" class="stage-days-input" min="1">
+                <span>天</span>
+                <button type="button" class="btn-remove-stage" title="移除此階段">✕</button>
+            `;
+            container.appendChild(newField);
+            updateSummary();
+            (newField.querySelector('.stage-name-input') as HTMLInputElement)?.focus();
+        });
+
+        // Custom Selector Logic
+        const customSelect = document.getElementById('template-custom-select');
+        if (customSelect) {
+            const trigger = customSelect.querySelector('.custom-select-trigger');
+            const options = customSelect.querySelectorAll('.custom-option');
+            const triggerText = customSelect.querySelector('.custom-select-text')!;
+
+            trigger?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                customSelect.classList.toggle('open');
+            });
+
+            options.forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    const val = el.dataset.value;
+
+                    options.forEach(o => o.classList.remove('active'));
+                    el.classList.add('active');
+                    triggerText.textContent = el.textContent || '';
+                    customSelect.classList.remove('open');
+
+                    // Trigger change logic
+                    if (val) {
+                        const tmpl = this.stageTemplates.find(t => t.id === parseInt(val));
+                        if (tmpl) {
+                            container.innerHTML = buildStageFields(tmpl.stages.map((s: any) => ({ name: s.name, days: s.days })));
+                            updateSummary();
+                        }
+                    } else { // "──自訂──" option
+                        container.innerHTML = buildStageFields(fallbackStages);
+                        updateSummary();
+                    }
+                });
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!customSelect.contains(e.target as Node)) {
+                    customSelect.classList.remove('open');
+                }
+            });
+        }
+
         document.getElementById('p-start')?.addEventListener('change', updateSummary);
         document.getElementById('p-end')?.addEventListener('change', updateSummary);
-        document.querySelectorAll('.stage-days-input').forEach(inp => inp.addEventListener('input', updateSummary));
         updateSummary();
 
-        document.getElementById('close-new-project')?.addEventListener('click', () => modal.classList.add('hidden'));
+        document.getElementById('close-new-project')?.addEventListener('click', () => modal!.classList.add('hidden'));
         document.getElementById('submit-project')?.addEventListener('click', async () => {
             const name = (document.getElementById('p-name') as HTMLInputElement).value;
             const startDate = (document.getElementById('p-start') as HTMLInputElement).value;
@@ -1571,7 +1938,7 @@ class GanttApp {
             if (!startDate || !endDate) return alert('請選擇專案起迄日');
 
             const stages: any[] = [];
-            document.querySelectorAll('.stage-field').forEach(field => {
+            container.querySelectorAll('.stage-field').forEach(field => {
                 const n = (field.querySelector('.stage-name-input') as HTMLInputElement).value;
                 const d = (field.querySelector('.stage-days-input') as HTMLInputElement).value;
                 stages.push({
@@ -1636,3 +2003,6 @@ class GanttApp {
 }
 
 new GanttApp();
+
+// AI Agent Chat Panel
+new AgentChat();

@@ -70,6 +70,37 @@ try {
     console.error('Migration error (announcements):', err);
 }
 
+// Migration: Create stage_templates and stage_template_items tables if not exists
+try {
+    const templateTables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='stage_templates'").get();
+    if (!templateTables) {
+        console.log('Migrating: Creating stage_templates tables...');
+        db.exec(`CREATE TABLE IF NOT EXISTS stage_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+        db.exec(`CREATE TABLE IF NOT EXISTS stage_template_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            days INTEGER NOT NULL DEFAULT 7,
+            "order" INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (template_id) REFERENCES stage_templates(id) ON DELETE CASCADE
+        )`);
+        // Seed default template
+        const info = db.prepare('INSERT OR IGNORE INTO stage_templates (name) VALUES (?)').run('預設範本');
+        if (info.lastInsertRowid) {
+            const insertItem = db.prepare('INSERT INTO stage_template_items (template_id, name, days, "order") VALUES (?, ?, ?, ?)');
+            [['需求確認', 3], ['規格定義', 5], ['執行', 10], ['測試', 5], ['結案', 2]].forEach(([n, d], i) => {
+                insertItem.run(info.lastInsertRowid, n, d, i);
+            });
+        }
+    }
+} catch (err) {
+    console.error('Migration error (stage_templates):', err);
+}
+
 console.log('Database initialized successfully.');
 
 module.exports = db;
