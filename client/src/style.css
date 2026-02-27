@@ -959,10 +959,12 @@ body.resizing {
     position: sticky;
     top: 0;
     background: var(--white);
-    z-index: 40;
+    z-index: 100;
     border-bottom: 2px solid var(--text);
     padding-left: var(--label-width);
     min-height: 48px;
+    width: fit-content;
+    min-width: 100%;
 }
 
 .time-cell {
@@ -991,6 +993,8 @@ body.resizing {
 .gantt-body {
     position: relative;
     padding-bottom: 60px;
+    width: fit-content;
+    min-width: 100%;
 }
 
 /* Gantt Row */
@@ -999,6 +1003,7 @@ body.resizing {
     height: 44px;
     border-bottom: 1px solid var(--grid);
     align-items: center;
+    min-width: fit-content;
 }
 
 /* 3-level hierarchy */
@@ -1034,9 +1039,9 @@ body.resizing {
     font-weight: 600;
     position: sticky;
     left: 0;
-    z-index: 30;
+    z-index: 50;
     overflow: hidden;
-    position: relative;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
 }
 
 .row-name {
@@ -1386,16 +1391,41 @@ body.resizing {
     color: #dc2626;
 }
 
-@keyframes pulse {
+/* Today Line */
+.today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #ef4444;
+    z-index: 20;
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
 
-    0%,
-    100% {
-        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-    }
+.today-line::after {
+    content: '今日';
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
 
-    50% {
-        box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
-    }
+#focus-today-btn {
+    background: #fdf2f2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+
+#focus-today-btn:hover {
+    background: #fee2e2;
+    border-color: #f87171;
 }
 
 /* Bar Handles */

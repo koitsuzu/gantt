@@ -84,7 +84,7 @@ export class GanttRenderer {
 
     render(items: GanttItem[], viewStart: Date, viewEnd: Date) {
         this.renderHeader(viewStart, viewEnd);
-        this.renderBody(items, viewStart);
+        this.renderBody(items, viewStart, viewEnd);
     }
 
     private renderHeader(start: Date, end: Date) {
@@ -122,10 +122,14 @@ export class GanttRenderer {
         return false;
     }
 
-    private renderBody(items: GanttItem[], viewStart: Date) {
+    private renderBody(items: GanttItem[], viewStart: Date, viewEnd: Date) {
         const cellWidth = this.engine.getCellWidth();
         const today = new Date();
         const todayStart = startOfDay(today);
+
+        // Calculate total width based on the same logic as header
+        const cells = this.engine.getRange(viewStart, viewEnd);
+        const totalWidth = cells.length * cellWidth;
 
         // Calculate today line position
         const todayPos = this.engine.getPosition(today, viewStart);
@@ -234,7 +238,7 @@ export class GanttRenderer {
                         ${addBtn}
                         <div class="row-label-resizer"></div>
                     </div>
-                    <div class="row-track" style="background-size: ${cellWidth}px 100%;">
+                    <div class="row-track" style="background-size: ${cellWidth}px 100%; min-width: ${totalWidth}px;">
                         <div class="gantt-bar ${item.type} ${alertClass} ${completedClass}" 
                              style="left: ${left}px; width: ${width}px; background-color: ${barColor}"
                              data-id="${item.id}">

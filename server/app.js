@@ -1174,9 +1174,11 @@ app.post('/api/agent/clear', (req, res) => {
 const clientDistPath = path.resolve(__dirname, '../client/dist');
 if (fs.existsSync(clientDistPath)) {
     app.use(express.static(clientDistPath));
-    app.get('*', (req, res) => {
-        if (!req.path.startsWith('/api')) {
+    app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api')) {
             res.sendFile(path.join(clientDistPath, 'index.html'));
+        } else {
+            next();
         }
     });
     console.log('Serving static files from:', clientDistPath);
