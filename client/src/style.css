@@ -959,12 +959,25 @@ body.resizing {
     position: sticky;
     top: 0;
     background: var(--white);
-    z-index: 100;
+    z-index: 20;
     border-bottom: 2px solid var(--text);
     padding-left: var(--label-width);
     min-height: 48px;
     width: fit-content;
     min-width: 100%;
+}
+
+/* Pin top-left corner so it covers row labels during horizontal scroll */
+.gantt-header-sticky::before {
+    content: '';
+    position: sticky;
+    left: 0;
+    z-index: 21;
+    width: var(--label-width);
+    min-width: var(--label-width);
+    background: var(--white);
+    margin-left: calc(-1 * var(--label-width));
+    border-right: 1px solid var(--border);
 }
 
 .time-cell {
@@ -1039,7 +1052,7 @@ body.resizing {
     font-weight: 600;
     position: sticky;
     left: 0;
-    z-index: 50;
+    z-index: 10;
     overflow: hidden;
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
 }

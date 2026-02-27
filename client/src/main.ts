@@ -21,7 +21,7 @@ class GanttApp {
     private currentProjectId: number | null = null;
     private isEditMode = false;
     private isAdminMode = false;
-    private activeTab = 'projects';
+    private activeTab = 'today';
     private kanbanView: KanbanView | null = null;
     private todayViewMode: 'kanban' | 'gantt' = 'kanban';
 
@@ -38,6 +38,9 @@ class GanttApp {
         await this.loadStageTemplates();
         await this.loadAllProjectsGantt();
         await this.loadProjectSummary();
+        // Start on today tab
+        this.renderAnnouncements();
+        this.renderKanbanBoard();
     }
 
     async loadDepartments() {
@@ -836,21 +839,24 @@ class GanttApp {
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 document.getElementById(`tab-${tabId}`)?.classList.add('active');
 
-                // Show/hide the kanban-gantt toggle based on tab
+                // Show/hide kanban toggle — only on today tab
                 const toggleBtn = document.getElementById('kanban-gantt-toggle');
                 if (toggleBtn) {
                     toggleBtn.style.display = tabId === 'today' ? '' : 'none';
                 }
 
-                // When leaving today tab, restore gantt if in kanban mode
+                // When leaving today tab in kanban mode, restore gantt chart
                 if (tabId !== 'today' && this.todayViewMode === 'kanban') {
                     this.showGanttChart();
                 }
 
                 // Load data for the selected tab
-                if (tabId === 'announcements') this.renderAnnouncements();
-                if (tabId === 'today') this.renderKanbanBoard();
+                if (tabId === 'today') {
+                    this.renderAnnouncements();
+                    this.renderKanbanBoard();
+                }
                 if (tabId === 'delay') this.renderDelayDetails();
+                if (tabId === 'projects') this.loadAllProjectsGantt();
             });
         });
 
@@ -938,9 +944,14 @@ class GanttApp {
                             if (toggleLabel) toggleLabel.textContent = '🔓 編輯模式';
                         }
                         this.interaction.setEnabled(true);
-                        // Reload data to potentially get archived projects in admin mode
+                        // Reload data
                         this.loadAllProjectsGantt();
                         this.loadProjectSummary();
+                        // Re-render today tab content if active
+                        if (this.activeTab === 'today') {
+                            this.renderAnnouncements();
+                            this.renderKanbanBoard();
+                        }
                     } else {
                         alert('密碼錯誤！');
                         editToggle.checked = false;
@@ -958,6 +969,11 @@ class GanttApp {
                 // Reload data to hide archived projects
                 this.loadAllProjectsGantt();
                 this.loadProjectSummary();
+                // Re-render today tab content if active
+                if (this.activeTab === 'today') {
+                    this.renderAnnouncements();
+                    this.renderKanbanBoard();
+                }
             }
         });
 

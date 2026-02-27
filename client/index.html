@@ -43,32 +43,26 @@
         <main class="content">
             <!-- Main Tabs -->
             <div class="main-tabs" id="main-tabs">
-                <button class="main-tab active" data-tab="projects">📋 專案</button>
-                <button class="main-tab" data-tab="announcements">📢 公告</button>
-                <button class="main-tab" data-tab="today">✅ 今日待辦</button>
+                <button class="main-tab active" data-tab="today">✅ 今日待辦</button>
                 <button class="main-tab" data-tab="delay">⚠️ DELAY</button>
-                <button id="kanban-gantt-toggle" class="btn-tool" style="display:none; margin-left:auto;">📋
-                    看板模式</button>
+                <button class="main-tab" data-tab="projects">📋 專案</button>
+                <button id="kanban-gantt-toggle" class="btn-tool" style="margin-left:auto;">📋 看板模式</button>
             </div>
 
-            <!-- Tab Content: Projects (default) -->
-            <div class="tab-content active" id="tab-projects">
-                <div class="project-overview" id="project-overview"></div>
-            </div>
-
-            <!-- Tab Content: Announcements -->
-            <div class="tab-content" id="tab-announcements">
+            <!-- Tab Content: Today's Todos (default, includes announcements) -->
+            <div class="tab-content active" id="tab-today">
                 <div id="announcements-container"></div>
-            </div>
-
-            <!-- Tab Content: Today's Todos -->
-            <div class="tab-content" id="tab-today">
                 <div id="today-container"></div>
             </div>
 
             <!-- Tab Content: Delay Details -->
             <div class="tab-content" id="tab-delay">
                 <div id="delay-container"></div>
+            </div>
+
+            <!-- Tab Content: Projects -->
+            <div class="tab-content" id="tab-projects">
+                <div class="project-overview" id="project-overview"></div>
             </div>
 
             <!-- Invisible drag handle (above toolbar) -->

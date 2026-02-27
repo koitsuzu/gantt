@@ -299,8 +299,11 @@ app.get('/api/tasks/today/kanban', (req, res) => {
             JOIN stages s ON st.stage_id = s.id
             JOIN projects p ON s.project_id = p.id
             WHERE p.status = 'active'
-              AND st.status != 'completed'
               AND date(st.start_date) <= date(?)
+              AND (
+                st.status != 'completed'
+                OR st.kanban_status = 'done'
+              )
             ORDER BY
               CASE st.kanban_status
                 WHEN 'doing' THEN 1
