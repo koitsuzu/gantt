@@ -46,10 +46,25 @@ CREATE TABLE IF NOT EXISTS sub_tasks (
     department TEXT DEFAULT '',
     start_date DATETIME NOT NULL,
     end_date DATETIME NOT NULL,
+    baseline_start_date DATETIME,
+    baseline_end_date DATETIME,
     progress INTEGER DEFAULT 0,
     status TEXT DEFAULT 'pending',
+    kanban_status TEXT DEFAULT 'todo',
+    completed_at DATETIME,
     FOREIGN KEY (stage_id) REFERENCES stages(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_task_id) REFERENCES sub_tasks(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sub_task_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    change_type TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    reason TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES sub_tasks(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS departments (

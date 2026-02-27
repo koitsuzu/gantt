@@ -101,6 +101,56 @@ try {
     console.error('Migration error (stage_templates):', err);
 }
 
+// Migration: Add baseline columns, kanban_status, completed_at to sub_tasks
+try {
+    const stCols = db.prepare('PRAGMA table_info(sub_tasks)').all();
+    const colNames = stCols.map(c => c.name);
+
+    if (!colNames.includes('baseline_start_date')) {
+        console.log('Migrating: Adding baseline_start_date to sub_tasks...');
+        db.prepare('ALTER TABLE sub_tasks ADD COLUMN baseline_start_date DATETIME').run();
+        // Backfill: set baseline = current dates for existing tasks
+        db.prepare('UPDATE sub_tasks SET baseline_start_date = start_date WHERE baseline_start_date IS NULL').run();
+    }
+    if (!colNames.includes('baseline_end_date')) {
+        console.log('Migrating: Adding baseline_end_date to sub_tasks...');
+        db.prepare('ALTER TABLE sub_tasks ADD COLUMN baseline_end_date DATETIME').run();
+        db.prepare('UPDATE sub_tasks SET baseline_end_date = end_date WHERE baseline_end_date IS NULL').run();
+    }
+    if (!colNames.includes('kanban_status')) {
+        console.log('Migrating: Adding kanban_status to sub_tasks...');
+        db.prepare("ALTER TABLE sub_tasks ADD COLUMN kanban_status TEXT DEFAULT 'todo'").run();
+    }
+    if (!colNames.includes('completed_at')) {
+        console.log('Migrating: Adding completed_at to sub_tasks...');
+        db.prepare('ALTER TABLE sub_tasks ADD COLUMN completed_at DATETIME').run();
+        // Backfill: set completed_at for tasks already completed
+        db.prepare("UPDATE sub_tasks SET completed_at = CURRENT_TIMESTAMP WHERE status = 'completed' AND completed_at IS NULL").run();
+    }
+} catch (err) {
+    console.error('Migration error (sub_tasks baseline/kanban):', err);
+}
+
+// Migration: Create sub_task_logs table
+try {
+    const logTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sub_task_logs'").get();
+    if (!logTable) {
+        console.log('Migrating: Creating sub_task_logs table...');
+        db.exec(`CREATE TABLE IF NOT EXISTS sub_task_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            change_type TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            reason TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES sub_tasks(id) ON DELETE CASCADE
+        )`);
+    }
+} catch (err) {
+    console.error('Migration error (sub_task_logs):', err);
+}
+
 console.log('Database initialized successfully.');
 
 module.exports = db;

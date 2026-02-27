@@ -1,8 +1,7 @@
-import './style.css'
+﻿import './style.css'
 import { GanttRenderer, GanttItem } from './renderer';
 import { GanttInteraction } from './interaction';
 import { AgentChat } from './agent-chat';
-import { KanbanView } from './views/KanbanView';
 import { startOfDay, addDays, format, addHours } from 'date-fns';
 
 const API_URL = 'http://localhost:3000/api';
@@ -22,8 +21,6 @@ class GanttApp {
     private isEditMode = false;
     private isAdminMode = false;
     private activeTab = 'projects';
-    private kanbanView: KanbanView | null = null;
-    private todayViewMode: 'kanban' | 'gantt' = 'kanban';
 
     constructor() {
         this.renderer = new GanttRenderer('gantt-chart', 'day');
@@ -102,11 +99,11 @@ class GanttApp {
             .sort((a, b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime());
 
         if (activeProjects.length === 0) {
-            list.innerHTML = '<li class="no-projects">尚未建立專案</li>';
+            list.innerHTML = '<li class="no-projects">撠撱箇?撠?</li>';
             return;
         }
 
-        const showAllItem = `<li data-id="all" class="${this.currentProjectId === null ? 'active' : ''}">顯示全部</li>`;
+        const showAllItem = `<li data-id="all" class="${this.currentProjectId === null ? 'active' : ''}">憿舐內?券</li>`;
 
         list.innerHTML = showAllItem + activeProjects.map(p => `
             <li data-id="${p.id}" class="${this.currentProjectId === p.id ? 'active' : ''}">${p.name}</li>
@@ -132,7 +129,7 @@ class GanttApp {
         if (!container) return;
 
         if (summaries.length === 0) {
-            container.innerHTML = '<p class="overview-empty">尚無專案，點擊「+ 新建專案」開始</p>';
+            container.innerHTML = '<p class="overview-empty">撠撠?嚗??? ?啣遣撠???憪?/p>';
             return;
         }
 
@@ -141,16 +138,16 @@ class GanttApp {
                 ${summaries.map(p => {
             const pct = p.totalTasks > 0 ? Math.round((p.completedTasks / p.totalTasks) * 100) : 0;
             let displayStatus = p.status;
-            let statusClass = p.status === '已完成' ? 'done' : p.status === '未開始' ? 'idle' : p.status === '進行中' ? 'active' : 'empty';
+            let statusClass = p.status === '撌脣??? ? 'done' : p.status === '?芷?憪? ? 'idle' : p.status === '?脰?銝? ? 'active' : 'empty';
 
             if (p.raw_status === 'closed') {
-                displayStatus = '已封存';
+                displayStatus = '撌脣?摮?;
                 statusClass = 'closed';
             }
 
             const dateRange = p.start_date && p.end_date
                 ? `${format(new Date(p.start_date), 'M/d')} ~ ${format(new Date(p.end_date), 'M/d')}`
-                : '未設定';
+                : '?芾身摰?;
 
             return `
                         <div class="overview-card ${p.raw_status === 'closed' ? 'card-closed' : ''}" data-id="${p.id}">
@@ -164,38 +161,38 @@ class GanttApp {
                             <div class="ov-stats">
                                 <div class="ov-stat">
                                     <span class="ov-stat-value">${p.totalTasks}</span>
-                                    <span class="ov-stat-label">總任務</span>
+                                    <span class="ov-stat-label">蝮賭遙??/span>
                                 </div>
                                 <div class="ov-stat">
                                     <span class="ov-stat-value">${p.completedTasks}</span>
-                                    <span class="ov-stat-label">已完成</span>
+                                    <span class="ov-stat-label">撌脣???/span>
                                 </div>
                                 <div class="ov-stat">
                                     <span class="ov-stat-value">${pct}%</span>
-                                    <span class="ov-stat-label">完成率</span>
+                                    <span class="ov-stat-label">摰???/span>
                                 </div>
                                 <div class="ov-stat">
                                     <span class="ov-stat-value">${dateRange}</span>
-                                    <span class="ov-stat-label">時程</span>
+                                    <span class="ov-stat-label">??</span>
                                 </div>
                             </div>
                             <div class="ov-export-actions">
                                 <div class="ov-export-dropdown">
-                                    <button class="btn-download-toggle" data-id="${p.id}">📥 下載</button>
+                                    <button class="btn-download-toggle" data-id="${p.id}">? 銝?</button>
                                     <div class="ov-dropdown-menu" id="dropdown-${p.id}">
-                                        <button class="btn-export-opt" data-export="excel" data-project-id="${p.id}">📊 Excel 報表</button>
-                                        <button class="btn-export-opt" data-export="pdf" data-project-id="${p.id}">📄 PDF 簡報</button>
-                                        <button class="btn-export-opt" data-export="json" data-project-id="${p.id}">📋 JSON 模板</button>
+                                        <button class="btn-export-opt" data-export="excel" data-project-id="${p.id}">?? Excel ?梯”</button>
+                                        <button class="btn-export-opt" data-export="pdf" data-project-id="${p.id}">?? PDF 蝪∪</button>
+                                        <button class="btn-export-opt" data-export="json" data-project-id="${p.id}">?? JSON 璅⊥</button>
                                     </div>
                                 </div>
                                 ${this.isAdminMode ? `
                                 <div class="ov-export-dropdown">
-                                    <button class="btn-admin-toggle" data-id="admin-${p.id}">🛡️ 管理</button>
+                                    <button class="btn-admin-toggle" data-id="admin-${p.id}">?儭?蝞∠?</button>
                                     <div class="ov-dropdown-menu dropdown-right" id="dropdown-admin-${p.id}">
                                         ${p.raw_status === 'closed'
-                        ? `<button class="btn-export-opt btn-unarchive" style="color:var(--text-main)" data-project-id="${p.id}">👁️ 解除隱藏</button>`
+                        ? `<button class="btn-export-opt btn-unarchive" style="color:var(--text-main)" data-project-id="${p.id}">??儭?閫??梯?</button>`
                         : ''}
-                                        <button class="btn-export-opt btn-hard-delete" style="color:var(--danger)" data-project-id="${p.id}">🗑️ 徹底刪除專案</button>
+                                        <button class="btn-export-opt btn-hard-delete" style="color:var(--danger)" data-project-id="${p.id}">??儭?敺孵??芷撠?</button>
                                     </div>
                                 </div>
                                 ` : ''}
@@ -242,12 +239,12 @@ class GanttApp {
                 e.stopPropagation();
                 const target = e.currentTarget as HTMLElement;
                 const projectId = target.dataset.projectId;
-                if (confirm('此操作將永久刪除專案與其所有資料，確定嗎？')) {
+                if (confirm('甇斗?雿?瘞訾??芷撠???????蝣箏???')) {
                     try {
                         await fetch(`${API_URL}/projects/${projectId}`, { method: 'DELETE' });
                         this.init(); // Reload all data
                     } catch (err) {
-                        alert('刪除失敗');
+                        alert('?芷憭望?');
                     }
                 }
                 target.closest('.ov-dropdown-menu')?.classList.remove('show');
@@ -264,7 +261,7 @@ class GanttApp {
                     await fetch(`${API_URL}/projects/${projectId}/unarchive`, { method: 'PATCH' });
                     this.init(); // Reload all data
                 } catch (err) {
-                    alert('解除隱藏失敗');
+                    alert('閫??梯?憭望?');
                 }
                 target.closest('.ov-dropdown-menu')?.classList.remove('show');
             });
@@ -293,7 +290,7 @@ class GanttApp {
         modal.classList.remove('hidden');
 
         // Fetch logs
-        let logsHtml = '<p style="font-size:0.95rem; color:#666">尚無變更紀錄</p>';
+        let logsHtml = '<p style="font-size:0.95rem; color:#666">撠霈蝝??/p>';
         try {
             const res = await fetch(`${API_URL}/projects/${project.id}/logs`);
             if (res.ok) {
@@ -303,7 +300,7 @@ class GanttApp {
                         <div style="font-size:0.9rem; border-left:2px solid #ddd; padding-left:8px; margin-bottom:8px">
                             <div style="color:#333; font-weight:600">${format(new Date(l.created_at), 'yyyy/MM/dd HH:mm')}</div>
                             <div style="color:#666">${l.reason}</div>
-                            <div style="color:#999; font-size:0.85rem">${format(new Date(l.old_end_date), 'MM/dd')} ➔ ${format(new Date(l.new_end_date), 'MM/dd')}</div>
+                            <div style="color:#999; font-size:0.85rem">${format(new Date(l.old_end_date), 'MM/dd')} ??${format(new Date(l.new_end_date), 'MM/dd')}</div>
                         </div>
                     `).join('');
                 }
@@ -312,40 +309,40 @@ class GanttApp {
 
         content.innerHTML = `
             <button class="btn-close" id="close-proj-modal">&times;</button>
-            <h3>編輯專案時程</h3>
-            <p class="modal-subtitle">專案：${project.name}</p>
+            <h3>蝺刻摩撠???</h3>
+            <p class="modal-subtitle">撠?嚗?{project.name}</p>
             
             <div style="margin-top:1.5rem">
                 <div class="form-group">
-                    <label>新結束日期</label>
+                    <label>?啁????/label>
                     <input type="date" id="edit-p-end" value="${format(new Date(project.end_date), 'yyyy-MM-dd')}">
                 </div>
                 <div class="form-group">
-                    <label>變更理由 <span style="color:red">*</span></label>
-                    <textarea id="edit-p-reason" placeholder="請輸入延後或提早結束的理由" required style="height:80px"></textarea>
+                    <label>霈? <span style="color:red">*</span></label>
+                    <textarea id="edit-p-reason" placeholder="隢撓?亙辣敺??蝯????? required style="height:80px"></textarea>
                 </div>
             </div>
 
             <div style="margin-top:1.5rem">
-                <p class="section-title">時程變更歷史</p>
+                <p class="section-title">??霈甇瑕</p>
                 <div style="max-height:150px; overflow-y:auto; padding:8px; background:#f9f9f9; border-radius:8px">
                     ${logsHtml}
                 </div>
             </div>
 
             <div class="modal-actions" style="margin-top:2rem">
-                <button type="button" class="btn-del" id="archive-project" style="background:#f1f5f9; color:#475569">結案 (隱藏)</button>
-                <button type="button" class="btn-primary" id="update-proj-schedule" style="flex:2">更新時程</button>
+                <button type="button" class="btn-del" id="archive-project" style="background:#f1f5f9; color:#475569">蝯? (?梯?)</button>
+                <button type="button" class="btn-primary" id="update-proj-schedule" style="flex:2">?湔??</button>
             </div>
         `;
 
         document.getElementById('close-proj-modal')?.addEventListener('click', () => modal.classList.add('hidden'));
 
         document.getElementById('archive-project')?.addEventListener('click', async () => {
-            if (!confirm('將專案存檔(結案)後將不再顯示於儀表板，確定嗎？')) return;
+            if (!confirm('撠?獢?瑼?蝯?)敺?銝?憿舐內?澆?銵冽嚗Ⅱ摰?嚗?)) return;
             try {
                 const res = await fetch(`${API_URL}/projects/${project.id}/archive`, { method: 'PATCH' });
-                if (!res.ok) throw new Error('結案失敗');
+                if (!res.ok) throw new Error('蝯?憭望?');
                 modal.classList.add('hidden');
                 await this.loadProjectSummary();
                 await this.loadAllProjectsGantt();
@@ -357,7 +354,7 @@ class GanttApp {
             const reason = (document.getElementById('edit-p-reason') as HTMLTextAreaElement).value;
 
             if (!reason.trim()) {
-                alert('請輸入變更理由');
+                alert('隢撓?亥??渡???);
                 return;
             }
 
@@ -367,7 +364,7 @@ class GanttApp {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ new_end_date: new Date(endDate).toISOString(), reason })
                 });
-                if (!res.ok) throw new Error('更新失敗');
+                if (!res.ok) throw new Error('?湔憭望?');
                 modal.classList.add('hidden');
                 await this.loadProjectSummary();
                 await this.loadAllProjectsGantt();
@@ -511,22 +508,22 @@ class GanttApp {
             const res = await fetch(`${API_URL}/announcements`);
             const announcements = await res.json();
 
-            const addBtn = this.isEditMode ? `<button class="btn-add-announcement" id="btn-add-ann">+ 新增公告</button>` : '';
+            const addBtn = this.isEditMode ? `<button class="btn-add-announcement" id="btn-add-ann">+ ?啣??砍?</button>` : '';
 
             if (announcements.length === 0) {
                 container.innerHTML = `
                     <div class="task-detail-container">
                         <div class="ann-header">
-                            <h2>📢 公告欄</h2>
+                            <h2>? ?砍?甈?/h2>
                             ${addBtn}
                         </div>
-                        <div class="ann-empty">目前沒有公告</div>
+                        <div class="ann-empty">?桀?瘝??砍?</div>
                     </div>`;
             } else {
                 container.innerHTML = `
                     <div class="task-detail-container">
                         <div class="ann-header">
-                            <h2>📢 公告欄</h2>
+                            <h2>? ?砍?甈?/h2>
                             ${addBtn}
                         </div>
                         <div class="ann-cards">
@@ -534,11 +531,11 @@ class GanttApp {
                                 <div class="ann-card ${a.pinned ? 'pinned' : ''}">
                                     ${this.isEditMode ? `
                                         <div class="ann-actions">
-                                            <button class="ann-pin-btn" data-ann-id="${a.id}" data-pinned="${a.pinned}" title="${a.pinned ? '取消置頂' : '置頂'}">${a.pinned ? '📌' : '📍'}</button>
-                                            <button class="ann-del-btn" data-ann-id="${a.id}" title="刪除">🗑</button>
+                                            <button class="ann-pin-btn" data-ann-id="${a.id}" data-pinned="${a.pinned}" title="${a.pinned ? '??蝵桅?' : '蝵桅?'}">${a.pinned ? '??' : '??'}</button>
+                                            <button class="ann-del-btn" data-ann-id="${a.id}" title="?芷">??</button>
                                         </div>
                                     ` : ''}
-                                    ${a.pinned ? '<span class="ann-pin-badge">📌 置頂</span>' : ''}
+                                    ${a.pinned ? '<span class="ann-pin-badge">?? 蝵桅?</span>' : ''}
                                     ${a.department ? `<div class="ann-dept">${a.department}</div>` : ''}
                                     <h3>${a.title}</h3>
                                     <p>${a.content || ''}</p>
@@ -571,7 +568,7 @@ class GanttApp {
             container.querySelectorAll('.ann-del-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const id = (btn as HTMLElement).dataset.annId;
-                    if (confirm('確定刪除此公告？')) {
+                    if (confirm('蝣箏??芷甇文??')) {
                         await fetch(`${API_URL}/announcements/${id}`, { method: 'DELETE' });
                         this.renderAnnouncements();
                     }
@@ -579,7 +576,7 @@ class GanttApp {
             });
         } catch (err) {
             console.error('Announcements load error:', err);
-            container.innerHTML = '<div class="ann-empty">載入公告時發生錯誤</div>';
+            container.innerHTML = '<div class="ann-empty">頛?砍???隤?/div>';
         }
     }
 
@@ -592,31 +589,30 @@ class GanttApp {
         ).join('');
 
         content.innerHTML = `
-            <h2>${existing ? '編輯公告' : '新增公告'}</h2>
+            <h2>${existing ? '蝺刻摩?砍?' : '?啣??砍?'}</h2>
             <form id="ann-form" style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
                 <label style="font-size:0.95rem;font-weight:600;color:var(--text-muted);">
-                    部門
+                    ?券?
                     <select id="ann-dept" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;margin-top:4px;font-size:1rem;">
-                        <option value="">全體</option>
+                        <option value="">?券?</option>
                         ${deptOptions}
                     </select>
                 </label>
                 <label style="font-size:0.95rem;font-weight:600;color:var(--text-muted);">
-                    標題 *
+                    璅? *
                     <input type="text" id="ann-title" value="${existing?.title || ''}" required 
                         style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;margin-top:4px;font-size:1rem;box-sizing:border-box;">
                 </label>
                 <label style="font-size:0.95rem;font-weight:600;color:var(--text-muted);">
-                    內容
+                    ?批捆
                     <textarea id="ann-content" rows="4" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;margin-top:4px;font-size:1rem;resize:vertical;box-sizing:border-box;">${existing?.content || ''}</textarea>
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:1rem;">
                     <input type="checkbox" id="ann-pinned" ${existing?.pinned ? 'checked' : ''}>
-                    📌 置頂此公告
-                </label>
+                    ?? 蝵桅?甇文??                </label>
                 <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
-                    <button type="button" id="ann-cancel" class="btn-secondary" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">取消</button>
-                    <button type="submit" class="btn-primary" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:white;cursor:pointer;font-weight:600;">送出</button>
+                    <button type="button" id="ann-cancel" class="btn-secondary" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;">??</button>
+                    <button type="submit" class="btn-primary" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:white;cursor:pointer;font-weight:600;">?</button>
                 </div>
             </form>
         `;
@@ -633,7 +629,7 @@ class GanttApp {
             const department = (document.getElementById('ann-dept') as HTMLSelectElement).value;
             const pinned = (document.getElementById('ann-pinned') as HTMLInputElement).checked;
 
-            if (!title) { alert('請輸入標題'); return; }
+            if (!title) { alert('隢撓?交?憿?); return; }
 
             const payload = { user_id: this.currentUserId, title, content: contentVal, department, pinned };
 
@@ -665,25 +661,25 @@ class GanttApp {
             if (tasks.length === 0) {
                 container.innerHTML = `
                     <div class="task-detail-container">
-                        <h2>✅ 今日待辦</h2>
-                        <div class="task-detail-empty">🎉 今天沒有待辦任務</div>
+                        <h2>??隞敺齒</h2>
+                        <div class="task-detail-empty">?? 隞予瘝?敺齒隞餃?</div>
                     </div>`;
                 return;
             }
 
             container.innerHTML = `
                 <div class="task-detail-container">
-                    <h2>✅ 今日待辦 (${tasks.length})</h2>
+                    <h2>??隞敺齒 (${tasks.length})</h2>
                     <table class="task-detail-table">
                         <thead>
                             <tr>
-                                <th>專案</th>
-                                <th>階段</th>
-                                <th>任務名稱</th>
-                                <th>部門</th>
-                                <th>截止日</th>
-                                <th>進度</th>
-                                <th>狀態</th>
+                                <th>撠?</th>
+                                <th>?挾</th>
+                                <th>隞餃??迂</th>
+                                <th>?券?</th>
+                                <th>?芣迫??/th>
+                                <th>?脣漲</th>
+                                <th>???/th>
                             </tr>
                         </thead>
                         <tbody>
@@ -695,7 +691,7 @@ class GanttApp {
                                     <td>${t.department || '-'}</td>
                                     <td>${t.end_date?.slice(0, 10) || '-'}</td>
                                     <td>${t.progress}%</td>
-                                    <td><span class="task-status-badge pending">${t.status === 'pending' ? '待處理' : t.status}</span></td>
+                                    <td><span class="task-status-badge pending">${t.status === 'pending' ? '敺??? : t.status}</span></td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -703,68 +699,8 @@ class GanttApp {
                 </div>`;
         } catch (err) {
             console.error('Today todos error:', err);
-            container.innerHTML = '<div class="task-detail-empty">載入待辦時發生錯誤</div>';
+            container.innerHTML = '<div class="task-detail-empty">頛敺齒??隤?/div>';
         }
-    }
-
-    async renderKanbanBoard() {
-        // 1. Always render the list at the top (today-container)
-        await this.renderTodayTodos();
-
-        // 2. Update the top toggle button
-        const toggleBtn = document.getElementById('kanban-gantt-toggle');
-        if (toggleBtn) {
-            toggleBtn.style.display = '';
-            if (this.todayViewMode === 'kanban') {
-                toggleBtn.textContent = '📊 甘特圖模式';
-            } else {
-                toggleBtn.textContent = '📋 看板模式';
-            }
-        }
-
-        // 3. Toggle the bottom area: gantt chart vs kanban board
-        const ganttChart = document.getElementById('gantt-chart');
-        if (!ganttChart) return;
-
-        if (this.todayViewMode === 'kanban') {
-            // Hide toolbar, show kanban in gantt area
-            const toolbar = document.querySelector('.toolbar') as HTMLElement;
-            if (toolbar) toolbar.style.display = 'none';
-
-            if (!this.kanbanView) {
-                this.kanbanView = new KanbanView();
-            }
-            await this.kanbanView.render(ganttChart, () => {
-                // Refresh gantt data after drag
-                this.loadAllProjectsGantt();
-            });
-        } else {
-            // Show toolbar and restore gantt chart
-            this.showGanttChart();
-        }
-    }
-
-    private showGanttChart() {
-        const toolbar = document.querySelector('.toolbar') as HTMLElement;
-        if (toolbar) toolbar.style.display = '';
-
-        // Restore the gantt container HTML structure if it was replaced by kanban
-        const ganttChart = document.getElementById('gantt-chart');
-        if (ganttChart) {
-            const hasGanttStructure = ganttChart.querySelector('#gantt-time-scale');
-            if (!hasGanttStructure) {
-                ganttChart.innerHTML = `
-                    <div class="gantt-header-sticky" id="gantt-time-scale"></div>
-                    <div class="gantt-body" id="gantt-rows"></div>
-                `;
-                // Re-initialize the renderer since the DOM was destroyed
-                this.renderer = new GanttRenderer('gantt-chart', 'day');
-            }
-        }
-
-        // Show all projects in gantt chart
-        this.currentProjectId = null;
-        this.loadAllProjectsGantt();
     }
 
     async renderDelayDetails() {
@@ -777,26 +713,26 @@ class GanttApp {
             if (tasks.length === 0) {
                 container.innerHTML = `
                     <div class="task-detail-container">
-                        <h2>⚠️ DELAY 明細</h2>
-                        <div class="task-detail-empty">✅ 沒有逾期任務</div>
+                        <h2>?? DELAY ?敦</h2>
+                        <div class="task-detail-empty">??瘝??暹?隞餃?</div>
                     </div>`;
                 return;
             }
 
             container.innerHTML = `
                 <div class="task-detail-container">
-                    <h2>⚠️ DELAY 明細 (${tasks.length})</h2>
+                    <h2>?? DELAY ?敦 (${tasks.length})</h2>
                     <table class="task-detail-table">
                         <thead>
                             <tr>
-                                <th>專案</th>
-                                <th>階段</th>
-                                <th>任務名稱</th>
-                                <th>部門</th>
-                                <th>原訂截止</th>
-                                <th>逾期天數</th>
-                                <th>進度</th>
-                                <th>狀態</th>
+                                <th>撠?</th>
+                                <th>?挾</th>
+                                <th>隞餃??迂</th>
+                                <th>?券?</th>
+                                <th>???芣迫</th>
+                                <th>?暹?憭拇</th>
+                                <th>?脣漲</th>
+                                <th>???/th>
                             </tr>
                         </thead>
                         <tbody>
@@ -811,9 +747,9 @@ class GanttApp {
                                     <td><strong>${t.name}</strong></td>
                                     <td>${t.department || '-'}</td>
                                     <td>${t.end_date?.slice(0, 10) || '-'}</td>
-                                    <td style="color:#dc2626;font-weight:700;">+${diffDays} 天</td>
+                                    <td style="color:#dc2626;font-weight:700;">+${diffDays} 憭?/td>
                                     <td>${t.progress}%</td>
-                                    <td><span class="task-status-badge overdue">逾期</span></td>
+                                    <td><span class="task-status-badge overdue">?暹?</span></td>
                                 </tr>`;
             }).join('')}
                         </tbody>
@@ -821,7 +757,7 @@ class GanttApp {
                 </div>`;
         } catch (err) {
             console.error('Delay details error:', err);
-            container.innerHTML = '<div class="task-detail-empty">載入DELAY明細時發生錯誤</div>';
+            container.innerHTML = '<div class="task-detail-empty">頛DELAY?敦??隤?/div>';
         }
     }
 
@@ -836,36 +772,14 @@ class GanttApp {
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 document.getElementById(`tab-${tabId}`)?.classList.add('active');
 
-                // Show/hide the kanban-gantt toggle based on tab
-                const toggleBtn = document.getElementById('kanban-gantt-toggle');
-                if (toggleBtn) {
-                    toggleBtn.style.display = tabId === 'today' ? '' : 'none';
-                }
-
-                // When leaving today tab, restore gantt if in kanban mode
-                if (tabId !== 'today' && this.todayViewMode === 'kanban') {
-                    this.showGanttChart();
-                }
+                // Gantt chart and toolbar stay visible on all tabs
 
                 // Load data for the selected tab
                 if (tabId === 'announcements') this.renderAnnouncements();
-                if (tabId === 'today') this.renderKanbanBoard();
+                if (tabId === 'today') this.renderTodayTodos();
                 if (tabId === 'delay') this.renderDelayDetails();
             });
         });
-
-        // Kanban/Gantt toggle button handler
-        const kanbanToggle = document.getElementById('kanban-gantt-toggle');
-        if (kanbanToggle) {
-            kanbanToggle.addEventListener('click', () => {
-                if (this.todayViewMode === 'kanban') {
-                    this.todayViewMode = 'gantt';
-                } else {
-                    this.todayViewMode = 'kanban';
-                }
-                this.renderKanbanBoard();
-            });
-        }
 
         // === Gantt Resizer (drag to adjust card/gantt split) ===
         const ganttResizer = document.getElementById('gantt-resizer');
@@ -918,7 +832,7 @@ class GanttApp {
 
         editToggle.addEventListener('change', async () => {
             if (editToggle.checked) {
-                const pass = prompt('請輸入密碼：');
+                const pass = prompt('隢撓?亙?蝣潘?');
                 if (!pass) { editToggle.checked = false; return; }
                 try {
                     const res = await fetch(`${API_URL}/verify-password`, {
@@ -933,27 +847,27 @@ class GanttApp {
                         document.body.classList.add('is-editing');
                         if (this.isAdminMode) {
                             document.body.classList.add('is-admin');
-                            if (toggleLabel) toggleLabel.textContent = '🛡️ 管理員模式';
+                            if (toggleLabel) toggleLabel.textContent = '?儭?蝞∠??⊥芋撘?;
                         } else {
-                            if (toggleLabel) toggleLabel.textContent = '🔓 編輯模式';
+                            if (toggleLabel) toggleLabel.textContent = '?? 蝺刻摩璅∪?';
                         }
                         this.interaction.setEnabled(true);
                         // Reload data to potentially get archived projects in admin mode
                         this.loadAllProjectsGantt();
                         this.loadProjectSummary();
                     } else {
-                        alert('密碼錯誤！');
+                        alert('撖Ⅳ?航炊嚗?);
                         editToggle.checked = false;
                     }
                 } catch {
-                    alert('無法驗證密碼，請確認伺服器是否正常運行');
+                    alert('?⊥?撽?撖Ⅳ嚗?蝣箄?隡箸??冽?行迤撣賊?銵?);
                     editToggle.checked = false;
                 }
             } else {
                 this.isEditMode = false;
                 this.isAdminMode = false;
                 document.body.classList.remove('is-editing', 'is-admin');
-                if (toggleLabel) toggleLabel.textContent = '🔒 唯讀模式';
+                if (toggleLabel) toggleLabel.textContent = '?? ?航?璅∪?';
                 this.interaction.setEnabled(false);
                 // Reload data to hide archived projects
                 this.loadAllProjectsGantt();
@@ -1140,25 +1054,25 @@ class GanttApp {
         const today = format(new Date(), 'yyyy-MM-dd');
 
         content.innerHTML = `
-            <h2 style="margin-top:0;color:var(--text-primary)">📥 匯入專案模板</h2>
+            <h2 style="margin-top:0;color:var(--text-primary)">? ?臬撠?璅⊥</h2>
             <form id="import-form">
                 <div class="form-group">
-                    <label>選擇 JSON 模板檔案</label>
+                    <label>?豢? JSON 璅⊥瑼?</label>
                     <input type="file" id="import-file" accept=".json" required style="padding:8px;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
                 </div>
                 <div id="import-preview" style="display:none;margin:12px 0;padding:10px;background:var(--bg-secondary);border-radius:8px;font-size:0.85rem">
                 </div>
                 <div class="form-group">
-                    <label>新專案名稱</label>
-                    <input type="text" id="import-name" required placeholder="輸入新專案名稱">
+                    <label>?啣?獢?蝔?/label>
+                    <input type="text" id="import-name" required placeholder="頛詨?啣?獢?蝔?>
                 </div>
                 <div class="form-group">
-                    <label>起始日期</label>
+                    <label>韏瑕??交?</label>
                     <input type="date" id="import-start" required value="${today}">
                 </div>
                 <div class="modal-actions" style="display:flex;gap:8px;margin-top:16px">
-                    <button type="submit" class="btn-submit" style="flex:1">匯入建立</button>
-                    <button type="button" id="close-import" class="btn-cancel" style="flex:1">取消</button>
+                    <button type="submit" class="btn-submit" style="flex:1">?臬撱箇?</button>
+                    <button type="button" id="close-import" class="btn-cancel" style="flex:1">??</button>
                 </div>
             </form>
         `;
@@ -1175,25 +1089,25 @@ class GanttApp {
                 try {
                     templateData = JSON.parse(e.target?.result as string);
                     if (templateData._format !== 'antigravity-gantt-v1') {
-                        preview.innerHTML = '<span style="color:#ef4444">❌ 無效的模板格式</span>';
+                        preview.innerHTML = '<span style="color:#ef4444">???⊥??芋?踵撘?/span>';
                         preview.style.display = 'block';
                         templateData = null;
                         return;
                     }
                     preview.innerHTML = `
-                        <div>✅ 模板載入成功</div>
-                        <div>原始專案：<strong>${templateData.name}</strong></div>
-                        <div>階段數：${templateData.stages?.length || 0}</div>
-                        <div>專案天數：${templateData.totalDays} 天</div>
+                        <div>??璅⊥頛??</div>
+                        <div>??撠?嚗?strong>${templateData.name}</strong></div>
+                        <div>?挾?賂?${templateData.stages?.length || 0}</div>
+                        <div>撠?憭拇嚗?{templateData.totalDays} 憭?/div>
                     `;
                     preview.style.display = 'block';
                     // Pre-fill name
                     const nameInput = document.getElementById('import-name') as HTMLInputElement;
                     if (nameInput && !nameInput.value) {
-                        nameInput.value = templateData.name + ' (副本)';
+                        nameInput.value = templateData.name + ' (?舀)';
                     }
                 } catch {
-                    preview.innerHTML = '<span style="color:#ef4444">❌ JSON 解析失敗</span>';
+                    preview.innerHTML = '<span style="color:#ef4444">??JSON 閫??憭望?</span>';
                     preview.style.display = 'block';
                     templateData = null;
                 }
@@ -1206,7 +1120,7 @@ class GanttApp {
         document.getElementById('import-form')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!templateData) {
-                alert('請先選擇有效的 JSON 模板檔案');
+                alert('隢??豢?????JSON 璅⊥瑼?');
                 return;
             }
 
@@ -1227,14 +1141,14 @@ class GanttApp {
 
                 if (!res.ok) {
                     const err = await res.json();
-                    throw new Error(err.error || '匯入失敗');
+                    throw new Error(err.error || '?臬憭望?');
                 }
 
                 modal.classList.add('hidden');
-                alert('✅ 專案匯入成功！');
+                alert('??撠??臬??嚗?);
                 await this.loadAllProjectsGantt();
             } catch (err) {
-                alert(`匯入失敗：${(err as Error).message}`);
+                alert(`?臬憭望?嚗?{(err as Error).message}`);
             }
         });
     }
@@ -1248,34 +1162,34 @@ class GanttApp {
         modal.classList.add('modal-lg');
 
         const renderDepts = () => {
-            if (this.departments.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">尚無部門</p>';
+            if (this.departments.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">撠?券?</p>';
             return this.departments.map(d => `
                 <div class="dept-item-wrapper" data-id="${d.id}">
                     <div class="dept-item-content">
                         <div class="dept-color-stripe" style="background: ${d.color}"></div>
                         <div class="dept-details">
                             <h4>${d.name}</h4>
-                            <p>${d.tasks.join(', ') || '無預設任務'}</p>
+                            <p>${d.tasks.join(', ') || '?⊿?閮凋遙??}</p>
                         </div>
-                        <span class="dept-edit-hint">點擊編輯</span>
+                        <span class="dept-edit-hint">暺?蝺刻摩</span>
                     </div>
-                    <button class="dept-item-delete" data-id="${d.id}">刪除</button>
+                    <button class="dept-item-delete" data-id="${d.id}">?芷</button>
                 </div>
             `).join('');
         };
 
         const renderTemplates = () => {
-            if (this.stageTemplates.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">尚無範本</p>';
+            if (this.stageTemplates.length === 0) return '<p style="color:var(--text-secondary);font-size:0.85rem">撠蝭</p>';
             return this.stageTemplates.map(t => `
                 <div class="dept-item-wrapper" data-tmpl-id="${t.id}">
                     <div class="dept-item-content" style="cursor:pointer">
                         <div class="dept-details">
                             <h4>${t.name}</h4>
-                            <p>${t.stages.map((s: any) => `${s.name}(${s.days}天)`).join(' → ')}</p>
+                            <p>${t.stages.map((s: any) => `${s.name}(${s.days}憭?`).join(' ??')}</p>
                         </div>
-                        <span class="dept-edit-hint">點擊編輯</span>
+                        <span class="dept-edit-hint">暺?蝺刻摩</span>
                     </div>
-                    <button class="dept-item-delete" data-tmpl-id="${t.id}">刪除</button>
+                    <button class="dept-item-delete" data-tmpl-id="${t.id}">?芷</button>
                 </div>
             `).join('');
         };
@@ -1284,13 +1198,13 @@ class GanttApp {
             <button class="btn-close" id="close-settings-btn">&times;</button>
             <div class="settings-container" style="padding: 1rem 0.5rem">
                 <div class="settings-header" style="margin-bottom: 2rem">
-                    <h2>系統設定</h2>
+                    <h2>蝟餌絞閮剖?</h2>
                 </div>
                 
                 <div class="settings-tabs">
-                    <button class="settings-tab ${initialTab === 'depts' ? 'active' : ''}" data-tab="depts">部門與預設任務</button>
-                    <button class="settings-tab ${initialTab === 'templates' ? 'active' : ''}" data-tab="templates">專案階段範本</button>
-                    <button class="settings-tab ${initialTab === 'general' ? 'active' : ''}" data-tab="general">一般設定</button>
+                    <button class="settings-tab ${initialTab === 'depts' ? 'active' : ''}" data-tab="depts">?券???閮凋遙??/button>
+                    <button class="settings-tab ${initialTab === 'templates' ? 'active' : ''}" data-tab="templates">撠??挾蝭</button>
+                    <button class="settings-tab ${initialTab === 'general' ? 'active' : ''}" data-tab="general">銝?祈身摰?/button>
                 </div>
 
                 <!-- Tab: Departments -->
@@ -1299,26 +1213,26 @@ class GanttApp {
                         <div class="settings-column">
                             <div class="settings-section">
                                 <div class="section-header">
-                                    <h3 id="dept-form-title">${this.editingDeptId ? '編輯部門' : '新增部門'}</h3>
+                                    <h3 id="dept-form-title">${this.editingDeptId ? '蝺刻摩?券?' : '?啣??券?'}</h3>
                                 </div>
                                 <div class="dept-form" style="margin-bottom:0">
                                     <div class="form-group">
-                                        <label>部門名稱</label>
-                                        <input type="text" id="new-dept-name" placeholder="例如：研發部">
+                                        <label>?券??迂</label>
+                                        <input type="text" id="new-dept-name" placeholder="靘?嚗??潮">
                                     </div>
                                     <div class="form-group">
-                                        <label>代表顏色</label>
+                                        <label>隞?”憿</label>
                                         <div class="color-input-wrapper">
                                             <input type="color" id="new-dept-color" value="#3b82f6">
                                         </div>
                                     </div>
                                     <div class="form-group">
-                                        <label>預設任務 (每行一個)</label>
-                                        <textarea id="new-dept-tasks" placeholder="任務 A\n任務 B" rows="5"></textarea>
+                                        <label>?身隞餃? (瘥?銝??</label>
+                                        <textarea id="new-dept-tasks" placeholder="隞餃? A\n隞餃? B" rows="5"></textarea>
                                     </div>
                                     <div style="display:flex;gap:12px;margin-top:8px">
-                                        <button class="btn-primary" id="save-dept-btn" style="flex:1">儲存部門</button>
-                                        <button class="btn-secondary" id="cancel-dept-btn" style="display:${this.editingDeptId ? 'inline-flex' : 'none'}">取消</button>
+                                        <button class="btn-primary" id="save-dept-btn" style="flex:1">?脣??券?</button>
+                                        <button class="btn-secondary" id="cancel-dept-btn" style="display:${this.editingDeptId ? 'inline-flex' : 'none'}">??</button>
                                     </div>
                                 </div>
                             </div>
@@ -1326,7 +1240,7 @@ class GanttApp {
                         <div class="settings-column">
                             <div class="settings-section">
                                 <div class="section-header">
-                                    <h3>現有部門列表</h3>
+                                    <h3>?暹??券??”</h3>
                                 </div>
                                 <div class="dept-items">${renderDepts()}</div>
                             </div>
@@ -1340,21 +1254,21 @@ class GanttApp {
                         <div class="settings-column">
                             <div class="settings-section">
                                 <div class="section-header">
-                                    <h3 id="tmpl-form-title">${this.editingTemplateId ? '編輯階段範本' : '新增階段範本'}</h3>
+                                    <h3 id="tmpl-form-title">${this.editingTemplateId ? '蝺刻摩?挾蝭' : '?啣??挾蝭'}</h3>
                                 </div>
                                 <div id="tmpl-form-wrapper" class="dept-form" style="margin-bottom:0">
                                     <div class="form-group">
-                                        <label>範本名稱</label>
-                                        <input type="text" id="tmpl-name-input" placeholder="例如：標準開發流程">
+                                        <label>蝭?迂</label>
+                                        <input type="text" id="tmpl-name-input" placeholder="靘?嚗?皞??潭?蝔?>
                                     </div>
                                     <div class="form-group">
-                                        <label>階段設定</label>
+                                        <label>?挾閮剖?</label>
                                         <div id="tmpl-stages-container"></div>
-                                        <button type="button" id="add-tmpl-stage-row" class="btn-tool" style="margin-top:8px;width:100%">＋ 新增階段</button>
+                                        <button type="button" id="add-tmpl-stage-row" class="btn-tool" style="margin-top:8px;width:100%">嚗??啣??挾</button>
                                     </div>
                                     <div style="display:flex;gap:12px;margin-top:16px">
-                                        <button class="btn-primary" id="save-tmpl-btn" style="flex:1">儲存範本</button>
-                                        <button class="btn-secondary" id="cancel-tmpl-btn" style="display:${this.editingTemplateId ? 'inline-flex' : 'none'}">取消</button>
+                                        <button class="btn-primary" id="save-tmpl-btn" style="flex:1">?脣?蝭</button>
+                                        <button class="btn-secondary" id="cancel-tmpl-btn" style="display:${this.editingTemplateId ? 'inline-flex' : 'none'}">??</button>
                                     </div>
                                 </div>
                             </div>
@@ -1362,7 +1276,7 @@ class GanttApp {
                         <div class="settings-column">
                             <div class="settings-section">
                                 <div class="section-header">
-                                    <h3>現有範本列表</h3>
+                                    <h3>?暹?蝭?”</h3>
                                 </div>
                                 <div id="tmpl-items" class="dept-items">${renderTemplates()}</div>
                             </div>
@@ -1373,12 +1287,12 @@ class GanttApp {
                 <!-- Tab: General (Placeholder) -->
                 <div class="settings-tab-panel ${initialTab === 'general' ? 'active' : ''}" id="tab-general">
                     <div class="settings-section">
-                        <div class="section-header"><h3>一般設定</h3></div>
-                        <p style="color:var(--text-secondary); margin-bottom: 1.5rem">這裡將來可以放置使用者權限、公司資訊或其他全域設定。</p>
+                        <div class="section-header"><h3>銝?祈身摰?/h3></div>
+                        <p style="color:var(--text-secondary); margin-bottom: 1.5rem">?ㄐ撠??臭誑?曄蔭雿輻????貉?閮??嗡??典?閮剖???/p>
                         <div class="form-group" style="max-width: 400px">
-                            <label>預設語系</label>
+                            <label>?身隤頂</label>
                             <select class="premium-select" style="width:100%; border:1px solid var(--border); padding:8px; border-radius:8px">
-                                <option>繁體中文 (台灣)</option>
+                                <option>蝜?銝剜? (?啁)</option>
                                 <option disabled>English (Coming Soon)</option>
                             </select>
                         </div>
@@ -1431,7 +1345,7 @@ class GanttApp {
             const color = (document.getElementById('new-dept-color') as HTMLInputElement).value;
             const tasks = (document.getElementById('new-dept-tasks') as HTMLTextAreaElement).value.split('\n').map(t => t.trim()).filter(t => t);
 
-            if (!name) return alert('請輸入部門名稱');
+            if (!name) return alert('隢撓?仿??迂');
 
             try {
                 const url = this.editingDeptId ? `${API_URL}/departments/${this.editingDeptId}` : `${API_URL}/departments`;
@@ -1442,7 +1356,7 @@ class GanttApp {
                     body: JSON.stringify({ name, color, tasks })
                 });
 
-                if (!res.ok) throw new Error('儲存部門失敗');
+                if (!res.ok) throw new Error('?脣??券?憭望?');
                 this.editingDeptId = null;
                 await this.loadDepartments();
                 this.showSettings('depts');
@@ -1457,10 +1371,10 @@ class GanttApp {
             div.className = 'stage-field';
             div.style.marginBottom = '8px';
             div.innerHTML = `
-                <input type="text" value="${name}" placeholder="階段名稱" class="stage-name-input" style="flex:2">
+                <input type="text" value="${name}" placeholder="?挾?迂" class="stage-name-input" style="flex:2">
                 <input type="number" value="${days}" class="stage-days-input" min="1" style="flex:1">
-                <span style="font-size:0.8rem;color:var(--text-secondary)">天</span>
-                <button type="button" class="btn-remove-stage" title="移除">✕</button>
+                <span style="font-size:0.8rem;color:var(--text-secondary)">憭?/span>
+                <button type="button" class="btn-remove-stage" title="蝘駁">??/button>
             `;
             return div;
         };
@@ -1482,13 +1396,13 @@ class GanttApp {
             if (btn && tmplContainer.querySelectorAll('.stage-field').length > 1) {
                 btn.closest('.stage-field')?.remove();
             } else if (btn) {
-                alert('至少需保留一個階段');
+                alert('?喳??靽?銝??畾?);
             }
         });
 
         document.getElementById('save-tmpl-btn')?.addEventListener('click', async () => {
             const tmplName = (document.getElementById('tmpl-name-input') as HTMLInputElement).value.trim();
-            if (!tmplName) return alert('請輸入範本名稱');
+            if (!tmplName) return alert('隢撓?亦??砍?蝔?);
 
             const stages: any[] = [];
             tmplContainer.querySelectorAll('.stage-field').forEach(field => {
@@ -1496,7 +1410,7 @@ class GanttApp {
                 const d = parseInt((field.querySelector('.stage-days-input') as HTMLInputElement).value) || 1;
                 if (n) stages.push({ name: n, days: d });
             });
-            if (stages.length === 0) return alert('請至少新增一個階段');
+            if (stages.length === 0) return alert('隢撠憓???畾?);
 
             try {
                 const url = this.editingTemplateId ? `${API_URL}/stage-templates/${this.editingTemplateId}` : `${API_URL}/stage-templates`;
@@ -1506,7 +1420,7 @@ class GanttApp {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: tmplName, stages })
                 });
-                if (!res.ok) throw new Error('儲存範本失敗');
+                if (!res.ok) throw new Error('?脣?蝭憭望?');
                 this.editingTemplateId = null;
                 await this.loadStageTemplates();
                 this.showSettings('templates');
@@ -1538,12 +1452,12 @@ class GanttApp {
                 const wrapper = (e.currentTarget as HTMLElement).closest('.dept-item-wrapper') as HTMLElement;
                 const id = wrapper.dataset.id || wrapper.dataset.tmplId;
                 const isTmpl = !!wrapper.dataset.tmplId;
-                if (!confirm(`確定要刪除此${isTmpl ? '範本' : '部門'}嗎？`)) return;
+                if (!confirm(`蝣箏?閬?斗迨${isTmpl ? '蝭' : '?券?'}??`)) return;
 
                 try {
                     const url = isTmpl ? `${API_URL}/stage-templates/${id}` : `${API_URL}/departments/${id}`;
                     const res = await fetch(url, { method: 'DELETE' });
-                    if (!res.ok) throw new Error('刪除失敗');
+                    if (!res.ok) throw new Error('?芷憭望?');
                     if (isTmpl) await this.loadStageTemplates();
                     else await this.loadDepartments();
                     this.showSettings(isTmpl ? 'templates' : 'depts');
@@ -1581,7 +1495,7 @@ class GanttApp {
                 if (stage.id === stageId) return stage;
             }
         }
-        return { name: '未知', start_date: new Date().toISOString(), end_date: new Date().toISOString() };
+        return { name: '?芰', start_date: new Date().toISOString(), end_date: new Date().toISOString() };
     }
 
     showAddStageModal(projectId: number) {
@@ -1591,19 +1505,19 @@ class GanttApp {
 
         content.innerHTML = `
             <div class="modal-header">
-                <h2>新增階段 (Stage)</h2>
+                <h2>?啣??挾 (Stage)</h2>
             </div>
             <div class="form-group">
-                <label>階段名稱</label>
-                <input type="text" id="new-stage-name" placeholder="例如：設計、開發、測試">
+                <label>?挾?迂</label>
+                <input type="text" id="new-stage-name" placeholder="靘?嚗身閮??潦葫閰?>
             </div>
             <div class="form-group">
-                <label>預設天數</label>
+                <label>?身憭拇</label>
                 <input type="number" id="new-stage-days" value="7" min="1">
             </div>
             <div class="modal-actions">
-                <button class="btn-secondary" id="cancel-add-stage">取消</button>
-                <button class="btn-primary" id="confirm-add-stage">儲存階段</button>
+                <button class="btn-secondary" id="cancel-add-stage">??</button>
+                <button class="btn-primary" id="confirm-add-stage">?脣??挾</button>
             </div>
         `;
 
@@ -1613,7 +1527,7 @@ class GanttApp {
             const name = (document.getElementById('new-stage-name') as HTMLInputElement).value.trim();
             const days = parseInt((document.getElementById('new-stage-days') as HTMLInputElement).value);
 
-            if (!name) return alert('請輸入階段名稱');
+            if (!name) return alert('隢撓?仿?畾萄?蝔?);
 
             const project = this.allProjectsData.find(p => p.id === projectId);
             let startDate = new Date();
@@ -1636,12 +1550,12 @@ class GanttApp {
                     })
                 });
 
-                if (!res.ok) throw new Error('儲存失敗');
+                if (!res.ok) throw new Error('?脣?憭望?');
 
                 close();
                 await this.loadAllProjectsGantt();
             } catch (err) {
-                alert('階段儲存出錯！');
+                alert('?挾?脣??粹嚗?);
             }
         });
     }
@@ -1651,8 +1565,8 @@ class GanttApp {
         const content = document.getElementById('modal-content')!;
         modal.classList.remove('hidden');
 
-        const title = existingTask ? '編輯子任務' : (parentTaskId ? '新增子任務（巢狀）' : '新增子任務');
-        const submitBtnText = existingTask ? '完成更新' : '新增';
+        const title = existingTask ? '蝺刻摩摮遙?? : (parentTaskId ? '?啣?摮遙??撌Ｙ?嚗? : '?啣?摮遙??);
+        const submitBtnText = existingTask ? '摰??湔' : '?啣?';
 
         const minDate = format(constraintStart, "yyyy-MM-dd'T'HH:mm");
         const maxDate = format(constraintEnd, "yyyy-MM-dd'T'HH:mm");
@@ -1666,38 +1580,38 @@ class GanttApp {
         content.innerHTML = `
             <button class="btn-close" id="close-modal-btn">&times;</button>
             <h3>${title}</h3>
-            <p class="modal-subtitle">${parentTaskId ? '父任務' : '階段'}：${constraintName}</p>
-            <p class="modal-range-hint">可用範圍：${constraintRange}</p>
+            <p class="modal-subtitle">${parentTaskId ? '?嗡遙?? : '?挾'}嚗?{constraintName}</p>
+            <p class="modal-range-hint">?舐蝭?嚗?{constraintRange}</p>
             <form id="add-sub-form">
                 <div class="form-row">
                     <div class="form-group" style="flex:1">
-                        <label>負責部門</label>
+                        <label>鞎痊?券?</label>
                         <select id="sub-dept" required>
-                            <option value="">請選擇部門</option>
+                            <option value="">隢??</option>
                             ${deptOptions}
                         </select>
                     </div>
                     <div class="form-group" style="flex:1">
-                        <label>子任務名稱</label>
+                        <label>摮遙??蝔?/label>
                         <div id="sub-name-wrapper">
                             <select id="sub-name" required ${!existingTask ? 'disabled' : ''}>
-                                ${existingTask ? `<option value="${existingTask.name}">${existingTask.name}</option>` : '<option value="">請先選擇部門</option>'}
+                                ${existingTask ? `<option value="${existingTask.name}">${existingTask.name}</option>` : '<option value="">隢??豢??券?</option>'}
                             </select>
                         </div>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>起始時間</label>
+                        <label>韏瑕???</label>
                         <input type="datetime-local" id="sub-start" value="${defaultStart}" min="${minDate}" max="${maxDate}" required>
                     </div>
                     <div class="form-group">
-                        <label>結束時間</label>
+                        <label>蝯???</label>
                         <input type="datetime-local" id="sub-end" value="${defaultEnd}" min="${minDate}" max="${maxDate}" required>
                     </div>
                 </div>
                 <div class="modal-actions">
-                    ${existingTask ? `<button type="button" class="btn-del" id="delete-task">刪除任務</button>` : ''}
+                    ${existingTask ? `<button type="button" class="btn-del" id="delete-task">?芷隞餃?</button>` : ''}
                     <button type="submit" class="btn-primary" style="flex:1">${submitBtnText}</button>
                 </div>
             </form>
@@ -1712,8 +1626,8 @@ class GanttApp {
             isCustomMode = true;
             nameWrapper.innerHTML = `
                 <div style="display:flex;gap:6px;align-items:center">
-                    <input type="text" id="sub-name-custom" placeholder="輸入自訂任務名稱" required style="flex:1">
-                    <button type="button" id="back-to-select" class="btn-tool" style="white-space:nowrap;padding:6px 10px;font-size:12px">↩ 選單</button>
+                    <input type="text" id="sub-name-custom" placeholder="頛詨?芾?隞餃??迂" required style="flex:1">
+                    <button type="button" id="back-to-select" class="btn-tool" style="white-space:nowrap;padding:6px 10px;font-size:12px">???詨</button>
                 </div>
             `;
             document.getElementById('sub-name-custom')?.focus();
@@ -1738,11 +1652,11 @@ class GanttApp {
                     options += `<option value="${existingTask.name}" selected>${existingTask.name}</option>`;
                 }
                 // Add custom option
-                options += `<option value="__custom__">✏️ 自訂名稱...</option>`;
+                options += `<option value="__custom__">?? ?芾??迂...</option>`;
                 nameSelect.innerHTML = options;
             } else {
                 nameSelect.disabled = true;
-                nameSelect.innerHTML = '<option value="">請先選擇部門</option>';
+                nameSelect.innerHTML = '<option value="">隢??豢??券?</option>';
             }
         };
 
@@ -1770,10 +1684,10 @@ class GanttApp {
 
         if (existingTask) {
             document.getElementById('delete-task')?.addEventListener('click', async () => {
-                if (!confirm('確定要刪除此子任務嗎？')) return;
+                if (!confirm('蝣箏?閬?斗迨摮遙??嚗?)) return;
                 try {
                     const res = await fetch(`${API_URL}/sub-tasks/${existingTask.id}`, { method: 'DELETE' });
-                    if (!res.ok) throw new Error('刪除子任務失敗');
+                    if (!res.ok) throw new Error('?芷摮遙?仃??);
                     modal.classList.add('hidden');
                     await this.loadAllProjectsGantt();
                     await this.loadProjectSummary();
@@ -1795,7 +1709,7 @@ class GanttApp {
                 taskName = sel?.value || '';
             }
             if (!taskName) {
-                alert('請輸入任務名稱');
+                alert('隢撓?乩遙??蝔?);
                 return;
             }
             const data: any = {
@@ -1821,7 +1735,7 @@ class GanttApp {
                 });
                 if (!res.ok) {
                     const errData = await res.json();
-                    throw new Error(errData.error || '儲存失敗');
+                    throw new Error(errData.error || '?脣?憭望?');
                 }
                 modal.classList.add('hidden');
                 await this.loadAllProjectsGantt();
@@ -1852,61 +1766,61 @@ class GanttApp {
                 <div class="stage-field">
                     <input type="text" value="${s.name}" class="stage-name-input">
                     <input type="number" value="${s.days}" class="stage-days-input" min="1">
-                    <span>天</span>
-                    <button type="button" class="btn-remove-stage" title="移除此階段">✕</button>
+                    <span>憭?/span>
+                    <button type="button" class="btn-remove-stage" title="蝘駁甇日?畾?>??/button>
                 </div>
             `).join('');
 
         // Default stages when no template available
         const fallbackStages = [
-            { name: '需求確認', days: 3 }, { name: '規格定義', days: 5 },
-            { name: '執行', days: 10 }, { name: '測試', days: 5 }, { name: '結案', days: 2 }
+            { name: '?瘙Ⅱ隤?, days: 3 }, { name: '閬摰儔', days: 5 },
+            { name: '?瑁?', days: 10 }, { name: '皜祈岫', days: 5 }, { name: '蝯?', days: 2 }
         ];
         const initialStages = hasTemplates ? this.stageTemplates[0].stages.map((s: any) => ({ name: s.name, days: s.days })) : fallbackStages;
 
         content.innerHTML = `
             <button class="btn-close" id="close-new-project">&times;</button>
-            <h3>建立新專案</h3>
+            <h3>撱箇??啣?獢?/h3>
             <div class="form-group">
-                <label>專案名稱</label>
-                <input type="text" id="p-name" placeholder="輸入專案名稱">
+                <label>撠??迂</label>
+                <input type="text" id="p-name" placeholder="頛詨撠??迂">
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>專案起始日</label>
+                    <label>撠?韏瑕???/label>
                     <input type="date" id="p-start" value="${today}">
                 </div>
                 <div class="form-group">
-                    <label>專案結束日</label>
+                    <label>撠?蝯???/label>
                     <input type="date" id="p-end" value="${defaultEnd}">
                 </div>
             </div>
             <p id="days-summary" class="modal-range-hint"></p>
             <div class="stages-input">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                    <p class="section-title" style="margin:0">設定階段名稱與天數</p>
+                    <p class="section-title" style="margin:0">閮剖??挾?迂?予??/p>
                     ${hasTemplates ? `
                     <div style="display:flex;align-items:center;gap:8px">
-                        <label style="font-size:0.8rem;color:var(--text-secondary)">套用範本：</label>
+                        <label style="font-size:0.8rem;color:var(--text-secondary)">憟蝭嚗?/label>
                         <div class="custom-select" id="template-custom-select">
                             <div class="custom-select-trigger">
-                                <span class="custom-select-text">${hasTemplates ? this.stageTemplates[0].name : '──自訂──'}</span>
+                                <span class="custom-select-text">${hasTemplates ? this.stageTemplates[0].name : '???芾???'}</span>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </div>
                             <div class="custom-options">
-                                <div class="custom-option ${!hasTemplates ? 'active' : ''}" data-value="">──自訂──</div>
+                                <div class="custom-option ${!hasTemplates ? 'active' : ''}" data-value="">???芾???</div>
                                 ${this.stageTemplates.map(t => `<div class="custom-option ${hasTemplates && t.id === this.stageTemplates[0].id ? 'active' : ''}" data-value="${t.id}">${t.name}</div>`).join('')}
                             </div>
                         </div>
-                    </div>` : `<span style="font-size:0.75rem;color:var(--text-secondary)">尚無範本（可在設定中新增）</span>`}
+                    </div>` : `<span style="font-size:0.75rem;color:var(--text-secondary)">撠蝭嚗?刻身摰葉?啣?嚗?/span>`}
                 </div>
                 <div id="stage-fields-container">
                     ${buildStageFields(initialStages)}
                 </div>
-                <button type="button" id="add-stage-row" class="btn-tool" style="margin-top:8px;width:100%;font-size:0.85rem">＋ 新增階段</button>
+                <button type="button" id="add-stage-row" class="btn-tool" style="margin-top:8px;width:100%;font-size:0.85rem">嚗??啣??挾</button>
             </div>
             <div class="modal-actions">
-                <button id="submit-project" class="btn-primary">建立專案</button>
+                <button id="submit-project" class="btn-primary">撱箇?撠?</button>
             </div>
         `;
 
@@ -1925,11 +1839,11 @@ class GanttApp {
             const availDays = Math.ceil((new Date(endVal).getTime() - new Date(startVal).getTime()) / 86400000);
 
             if (totalDays > availDays) {
-                summaryEl.textContent = `⚠ 階段共 ${totalDays} 天，超過專案可用 ${availDays} 天`;
+                summaryEl.textContent = `???挾??${totalDays} 憭抬?頞?撠??舐 ${availDays} 憭奈;
                 summaryEl.style.background = '#fef2f2';
                 summaryEl.style.color = '#dc2626';
             } else {
-                summaryEl.textContent = `✓ 階段共 ${totalDays} 天 / 專案可用 ${availDays} 天`;
+                summaryEl.textContent = `???挾??${totalDays} 憭?/ 撠??舐 ${availDays} 憭奈;
                 summaryEl.style.background = '';
                 summaryEl.style.color = '';
             }
@@ -1947,7 +1861,7 @@ class GanttApp {
                     field.remove();
                     updateSummary();
                 } else {
-                    alert('至少需保留一個階段');
+                    alert('?喳??靽?銝??畾?);
                 }
             }
         });
@@ -1957,10 +1871,10 @@ class GanttApp {
             const newField = document.createElement('div');
             newField.className = 'stage-field';
             newField.innerHTML = `
-                <input type="text" value="" placeholder="階段名稱" class="stage-name-input">
+                <input type="text" value="" placeholder="?挾?迂" class="stage-name-input">
                 <input type="number" value="7" class="stage-days-input" min="1">
-                <span>天</span>
-                <button type="button" class="btn-remove-stage" title="移除此階段">✕</button>
+                <span>憭?/span>
+                <button type="button" class="btn-remove-stage" title="蝘駁甇日?畾?>??/button>
             `;
             container.appendChild(newField);
             updateSummary();
@@ -1996,7 +1910,7 @@ class GanttApp {
                             container.innerHTML = buildStageFields(tmpl.stages.map((s: any) => ({ name: s.name, days: s.days })));
                             updateSummary();
                         }
-                    } else { // "──自訂──" option
+                    } else { // "???芾???" option
                         container.innerHTML = buildStageFields(fallbackStages);
                         updateSummary();
                     }
@@ -2019,15 +1933,15 @@ class GanttApp {
             const name = (document.getElementById('p-name') as HTMLInputElement).value;
             const startDate = (document.getElementById('p-start') as HTMLInputElement).value;
             const endDate = (document.getElementById('p-end') as HTMLInputElement).value;
-            if (!name) return alert('請輸入專案名稱');
-            if (!startDate || !endDate) return alert('請選擇專案起迄日');
+            if (!name) return alert('隢撓?亙?獢?蝔?);
+            if (!startDate || !endDate) return alert('隢??獢絲餈');
 
             const stages: any[] = [];
             container.querySelectorAll('.stage-field').forEach(field => {
                 const n = (field.querySelector('.stage-name-input') as HTMLInputElement).value;
                 const d = (field.querySelector('.stage-days-input') as HTMLInputElement).value;
                 stages.push({
-                    name: n || '未命名',
+                    name: n || '?芸??,
                     days: parseInt(d) || 1
                 });
             });
@@ -2046,7 +1960,7 @@ class GanttApp {
                 });
                 if (!res.ok) {
                     const errData = await res.json();
-                    throw new Error(errData.error || '建立失敗');
+                    throw new Error(errData.error || '撱箇?憭望?');
                 }
                 modal.classList.add('hidden');
                 await this.loadAllProjectsGantt();

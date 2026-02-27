@@ -107,6 +107,21 @@ export class ApiService {
         });
     }
 
+    // === 看板 ===
+    static async getTodayKanban(): Promise<any[]> {
+        const res = await fetch(`${API_URL}/tasks/today/kanban`);
+        return res.json();
+    }
+
+    static async updateKanbanStatus(taskId: number, kanbanStatus: string): Promise<void> {
+        const res = await fetch(`${API_URL}/sub-tasks/${taskId}/kanban`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kanban_status: kanbanStatus })
+        });
+        if (!res.ok) throw new Error('更新看板狀態失敗');
+    }
+
     // === 密碼驗證 ===
     static async verifyPassword(password: string): Promise<{ role: string }> {
         const res = await fetch(`${API_URL}/verify-password`, {

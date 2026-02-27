@@ -60,6 +60,32 @@ function cascadeComplete(taskId, status) {
     children.forEach(child => cascadeComplete(child.id, status));
 }
 
+// === Helper: cascade completion status upward to parent tasks ===
+function cascadeUp(taskId) {
+    const task = db.prepare('SELECT parent_task_id FROM sub_tasks WHERE id = ?').get(taskId);
+    if (!task || !task.parent_task_id) return;
+
+    const parentId = task.parent_task_id;
+    const siblings = db.prepare('SELECT id, status FROM sub_tasks WHERE parent_task_id = ?').all(parentId);
+
+    const allCompleted = siblings.every(s => s.status === 'completed');
+    const anyPending = siblings.some(s => s.status !== 'completed');
+
+    if (allCompleted) {
+        db.prepare('UPDATE sub_tasks SET status = ?, progress = 100, kanban_status = ? WHERE id = ?').run('completed', 'done', parentId);
+        // Continue cascading upward
+        cascadeUp(parentId);
+    } else if (anyPending) {
+        // If parent was completed but a child is now pending, mark parent as pending too
+        const parent = db.prepare('SELECT status FROM sub_tasks WHERE id = ?').get(parentId);
+        if (parent && parent.status === 'completed') {
+            db.prepare('UPDATE sub_tasks SET status = ?, progress = 0, kanban_status = ? WHERE id = ?').run('pending', 'todo', parentId);
+            // Continue cascading upward
+            cascadeUp(parentId);
+        }
+    }
+}
+
 function startOfDay(date) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
@@ -239,16 +265,83 @@ app.post('/api/stages', (req, res) => {
     }
 });
 
-// === Sub-task Completion Toggle (cascading to children) ===
+// === Sub-task Completion Toggle (cascading to children + parents) ===
 app.patch('/api/sub-tasks/:id/complete', (req, res) => {
     const { status } = req.body;
     try {
         db.transaction(() => {
             cascadeComplete(parseInt(req.params.id), status);
+            // Record completed_at timestamp
+            if (status === 'completed') {
+                db.prepare('UPDATE sub_tasks SET completed_at = CURRENT_TIMESTAMP, kanban_status = ? WHERE id = ?').run('done', req.params.id);
+            } else {
+                db.prepare('UPDATE sub_tasks SET completed_at = NULL, kanban_status = ? WHERE id = ?').run('todo', req.params.id);
+            }
+            // Cascade upward: if all siblings complete, mark parent complete too
+            cascadeUp(parseInt(req.params.id));
         })();
         res.json({ success: true, status: status === 'completed' ? 'completed' : 'pending' });
     } catch (err) {
         console.error('Sub-task completion error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === Kanban API ===
+app.get('/api/tasks/today/kanban', (req, res) => {
+    try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const rows = db.prepare(`
+            SELECT st.id, st.name, st.department, st.start_date, st.end_date,
+                   st.status, st.kanban_status,
+                   s.name as stage_name, p.name as project_name
+            FROM sub_tasks st
+            JOIN stages s ON st.stage_id = s.id
+            JOIN projects p ON s.project_id = p.id
+            WHERE p.status = 'active'
+              AND st.status != 'completed'
+              AND date(st.start_date) <= date(?)
+            ORDER BY
+              CASE st.kanban_status
+                WHEN 'doing' THEN 1
+                WHEN 'todo' THEN 2
+                WHEN 'done' THEN 3
+                ELSE 4
+              END,
+              st.end_date ASC
+        `).all(todayStr);
+        res.json(rows);
+    } catch (err) {
+        console.error('Kanban tasks error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.patch('/api/sub-tasks/:id/kanban', (req, res) => {
+    const { kanban_status } = req.body;
+    if (!kanban_status || !['todo', 'doing', 'done'].includes(kanban_status)) {
+        return res.status(400).json({ error: 'Invalid kanban_status' });
+    }
+    try {
+        db.prepare('UPDATE sub_tasks SET kanban_status = ? WHERE id = ?').run(kanban_status, req.params.id);
+
+        // If moved to 'done', also mark as completed
+        if (kanban_status === 'done') {
+            cascadeComplete(parseInt(req.params.id), 'completed');
+            db.prepare('UPDATE sub_tasks SET completed_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+            cascadeUp(parseInt(req.params.id));
+        } else if (kanban_status === 'todo' || kanban_status === 'doing') {
+            // If moved back from done, mark as pending
+            const task = db.prepare('SELECT status FROM sub_tasks WHERE id = ?').get(req.params.id);
+            if (task && task.status === 'completed') {
+                db.prepare('UPDATE sub_tasks SET status = ?, completed_at = NULL WHERE id = ?').run('pending', req.params.id);
+                cascadeUp(parseInt(req.params.id));
+            }
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Kanban status update error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -293,9 +386,9 @@ app.post('/api/sub-tasks', (req, res) => {
             }
         }
 
-        const stmt = db.prepare('INSERT INTO sub_tasks (stage_id, parent_task_id, name, department, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)');
-        const info = stmt.run(stageId, parentTaskId || null, name, department || '', start_date, end_date);
-        console.log('Sub-task created:', info.lastInsertRowid);
+        const stmt = db.prepare('INSERT INTO sub_tasks (stage_id, parent_task_id, name, department, start_date, end_date, baseline_start_date, baseline_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        const info = stmt.run(stageId, parentTaskId || null, name, department || '', start_date, end_date, start_date, end_date);
+        console.log('Sub-task created with baseline:', info.lastInsertRowid);
         res.json({ success: true, taskId: info.lastInsertRowid });
     } catch (err) {
         console.error('Sub-task Creation Error:', err);
@@ -348,6 +441,71 @@ app.delete('/api/sub-tasks/:id', (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Sub-task delete error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === Kanban Status Update ===
+app.patch('/api/sub-tasks/:id/kanban', (req, res) => {
+    const { kanban_status } = req.body;
+    if (!['todo', 'doing', 'done'].includes(kanban_status)) {
+        return res.status(400).json({ error: 'Invalid kanban_status. Must be: todo, doing, done' });
+    }
+    try {
+        const taskId = parseInt(req.params.id);
+        const task = db.prepare('SELECT status FROM sub_tasks WHERE id = ?').get(taskId);
+        if (!task) return res.status(404).json({ error: '找不到該任務' });
+
+        db.transaction(() => {
+            // Update kanban status
+            db.prepare('UPDATE sub_tasks SET kanban_status = ? WHERE id = ?').run(kanban_status, taskId);
+
+            // If moved to 'done', also mark as completed
+            if (kanban_status === 'done' && task.status !== 'completed') {
+                cascadeComplete(taskId, 'completed');
+                db.prepare('UPDATE sub_tasks SET completed_at = CURRENT_TIMESTAMP WHERE id = ?').run(taskId);
+            }
+            // If moved away from 'done', revert to pending
+            if (kanban_status !== 'done' && task.status === 'completed') {
+                cascadeComplete(taskId, 'pending');
+                db.prepare('UPDATE sub_tasks SET completed_at = NULL WHERE id = ?').run(taskId);
+            }
+
+            // Log the change
+            db.prepare('INSERT INTO sub_task_logs (task_id, change_type, old_value, new_value) VALUES (?, ?, ?, ?)').run(
+                taskId, 'kanban_status', task.status === 'completed' ? 'done' : 'todo', kanban_status
+            );
+        })();
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Kanban status update error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === Today tasks with kanban status (shows all active tasks) ===
+app.get('/api/tasks/today/kanban', (req, res) => {
+    try {
+        const tasks = db.prepare(`
+            SELECT st.*, s.name AS stage_name, p.name AS project_name
+            FROM sub_tasks st
+            JOIN stages s ON st.stage_id = s.id
+            JOIN projects p ON s.project_id = p.id
+            WHERE p.status = 'active'
+              AND (st.status != 'completed' OR st.kanban_status = 'done')
+            ORDER BY
+              CASE st.kanban_status
+                WHEN 'doing' THEN 0
+                WHEN 'todo' THEN 1
+                WHEN 'done' THEN 2
+                ELSE 3
+              END,
+              st.end_date ASC
+        `).all();
+        res.json(tasks);
+    } catch (err) {
+        console.error('Today kanban error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -753,8 +911,7 @@ app.delete('/api/announcements/:id', (req, res) => {
 // === Tasks: Today's Todos ===
 app.get('/api/tasks/today', (req, res) => {
     try {
-        const today = new Date();
-        const todayStr = today.toISOString().slice(0, 10);
+        const todayStr = new Date().toISOString().slice(0, 10);
         const rows = db.prepare(`
             SELECT s.*, st.name as stage_name, p.name as project_name, p.id as project_id
             FROM sub_tasks s
@@ -763,9 +920,8 @@ app.get('/api/tasks/today', (req, res) => {
             WHERE p.status = 'active'
               AND s.status != 'completed'
               AND date(s.start_date) <= date(?)
-              AND date(s.end_date) >= date(?)
             ORDER BY s.end_date ASC
-        `).all(todayStr, todayStr);
+        `).all(todayStr);
         res.json(rows);
     } catch (err) {
         console.error('Today tasks error:', err);
