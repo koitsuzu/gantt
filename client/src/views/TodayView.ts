@@ -1,14 +1,15 @@
 /**
- * TodayView - 今日待辦任務列表
+ * TodayView - 今日待辦列表渲染
  */
-import { ApiService } from '../services/ApiService';
+const API_URL = 'http://localhost:3000/api';
 
 export class TodayView {
     async render() {
         const container = document.getElementById('today-container');
         if (!container) return;
         try {
-            const tasks = await ApiService.getTodayTasks();
+            const res = await fetch(`${API_URL}/tasks/today`);
+            const tasks = await res.json();
 
             if (tasks.length === 0) {
                 container.innerHTML = `

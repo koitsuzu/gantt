@@ -1,14 +1,15 @@
 /**
- * DelayView - DELAY 逾期任務明細
+ * DelayView - 逾期任務列表渲染
  */
-import { ApiService } from '../services/ApiService';
+const API_URL = 'http://localhost:3000/api';
 
 export class DelayView {
     async render() {
         const container = document.getElementById('delay-container');
         if (!container) return;
         try {
-            const tasks = await ApiService.getDelayedTasks();
+            const res = await fetch(`${API_URL}/tasks/delayed`);
+            const tasks = await res.json();
 
             if (tasks.length === 0) {
                 container.innerHTML = `

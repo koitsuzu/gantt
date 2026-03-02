@@ -15,4 +15,6 @@ export interface AppState {
     // 回調方法：讓 View 能觸發主控制器的重新載入
     reloadAll: () => Promise<void>;
     refreshGantt: () => void;
+    renderAnnouncements: () => void;
+    renderKanbanBoard: () => void;
 }

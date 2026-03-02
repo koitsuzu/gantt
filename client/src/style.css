@@ -704,14 +704,7 @@ input:checked+.slider:before {
     color: var(--accent);
 }
 
-/* Sync Import Project Button Color */
-#import-project-btn {
-    background: var(--accent) !important;
-}
 
-#import-project-btn:hover {
-    background: var(--accent-hover) !important;
-}
 
 /* === Announcement Cards === */
 .ann-header {
@@ -3013,4 +3006,60 @@ textarea:focus {
     color: #ef4444;
     font-weight: 700;
     font-size: 0.8rem;
+}
+
+/* === Nav Action Buttons (+ 專案 / 匯入 / 設定) === */
+.btn-top-action {
+    padding: 7px 16px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: not-allowed;
+    background: #e4e4e7;
+    color: #52525b;
+    transition: background 0.2s, color 0.2s, opacity 0.2s;
+}
+
+.btn-icon {
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    background: transparent;
+    transition: background 0.2s, opacity 0.2s;
+}
+
+/* 非編輯模式：底色返灰、pointer 變 not-allowed */
+body:not(.is-editing) .btn-top-action {
+    background: #e4e4e7;
+    color: #52525b;
+    cursor: not-allowed;
+}
+
+body:not(.is-editing) .btn-icon {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+/* 編輯模式：主題色 */
+body.is-editing .btn-top-action {
+    background: var(--accent);
+    color: #fff;
+}
+
+body.is-editing .btn-top-action:hover {
+    background: var(--accent-hover);
+}
+
+body.is-editing .btn-icon {
+    opacity: 1;
+    filter: none;
+}
+
+body.is-editing .btn-icon:hover {
+    background: var(--accent-bg);
 }
