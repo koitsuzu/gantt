@@ -2274,7 +2274,9 @@ textarea:focus {
     right: 24px;
     width: 420px;
     height: 560px;
-    max-height: calc(100vh - 48px);
+    min-width: 360px;
+    min-height: 400px;
+    max-height: calc(100vh - 24px);
     z-index: 10000;
     display: flex;
     flex-direction: column;
@@ -2284,7 +2286,7 @@ textarea:focus {
     transform: translateY(20px) scale(0.95);
     opacity: 0;
     pointer-events: none;
-    transition: all 0.3s var(--ease);
+    transition: transform 0.3s var(--ease), opacity 0.3s var(--ease);
     overflow: hidden;
 }
 
@@ -2293,6 +2295,353 @@ textarea:focus {
     opacity: 1;
     pointer-events: auto;
 }
+
+/* Resize Handles */
+.agent-resize-handle {
+    position: absolute;
+    z-index: 10001;
+}
+
+.agent-resize-n {
+    top: -3px;
+    left: 8px;
+    right: 8px;
+    height: 6px;
+    cursor: n-resize;
+}
+
+.agent-resize-s {
+    bottom: -3px;
+    left: 8px;
+    right: 8px;
+    height: 6px;
+    cursor: s-resize;
+}
+
+.agent-resize-e {
+    top: 8px;
+    right: -3px;
+    bottom: 8px;
+    width: 6px;
+    cursor: e-resize;
+}
+
+.agent-resize-w {
+    top: 8px;
+    left: -3px;
+    bottom: 8px;
+    width: 6px;
+    cursor: w-resize;
+}
+
+.agent-resize-ne {
+    top: -3px;
+    right: -3px;
+    width: 12px;
+    height: 12px;
+    cursor: ne-resize;
+}
+
+.agent-resize-nw {
+    top: -3px;
+    left: -3px;
+    width: 12px;
+    height: 12px;
+    cursor: nw-resize;
+}
+
+.agent-resize-se {
+    bottom: -3px;
+    right: -3px;
+    width: 12px;
+    height: 12px;
+    cursor: se-resize;
+}
+
+.agent-resize-sw {
+    bottom: -3px;
+    left: -3px;
+    width: 12px;
+    height: 12px;
+    cursor: sw-resize;
+}
+
+/* Agent Legend Bar */
+.agent-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    font-size: 0.78rem;
+}
+
+.agent-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.agent-legend-item.consultant {
+    color: #3b82f6;
+}
+
+.agent-legend-item.operator {
+    color: #f59e0b;
+}
+
+.agent-legend-tip {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.72rem;
+}
+
+/* @mention Dropdown */
+.agent-mention-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: 12px;
+    right: 12px;
+    background: #1e293b;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+    margin-bottom: 4px;
+}
+
+.agent-mention-option {
+    padding: 10px 16px;
+    color: #e2e8f0;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.agent-mention-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+/* Agent Message Labels */
+.agent-msg-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.agent-label-consultant {
+    color: #3b82f6;
+}
+
+.agent-label-operator {
+    color: #f59e0b;
+}
+
+/* Agent Avatars by Role */
+.agent-avatar-consultant {
+    background: linear-gradient(135deg, #3b82f6, #60a5fa) !important;
+}
+
+.agent-avatar-operator {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24) !important;
+}
+
+/* Agent message bubble border accent */
+.agent-msg-consultant .agent-msg-bubble {
+    border-left: 3px solid #3b82f6;
+}
+
+.agent-msg-operator .agent-msg-bubble {
+    border-left: 3px solid #f59e0b;
+}
+
+.agent-input-wrapper {
+    position: relative;
+}
+
+/* Confirm Action Buttons */
+.agent-confirm-action {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.agent-confirm-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #fff;
+}
+
+.agent-confirm-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(167, 131, 85, 0.3);
+}
+
+.agent-confirm-btn.cancel {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.agent-confirm-btn.cancel:hover:not(:disabled) {
+    background: #e2e8f0;
+    box-shadow: none;
+    transform: none;
+}
+
+.agent-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Loading Dots */
+.agent-loading {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.agent-loading-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #94a3b8;
+    animation: agent-bounce 1.4s infinite ease-in-out both;
+}
+
+.agent-loading-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.agent-loading-dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes agent-bounce {
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+    }
+
+    40% {
+        transform: scale(1);
+    }
+}
+
+/* Password Modal */
+.agent-password-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.agent-password-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+}
+
+.agent-password-modal-content {
+    position: relative;
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 32px;
+    max-width: 380px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.agent-password-modal-content h4 {
+    font-size: 1.2rem;
+    color: #1e293b;
+    margin: 0 0 8px 0;
+}
+
+.agent-password-modal-content p {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin: 0 0 20px 0;
+}
+
+#agent-password-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+#agent-password-input:focus {
+    border-color: var(--accent);
+}
+
+.agent-password-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.agent-password-btn {
+    flex: 1;
+    padding: 10px 0;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.agent-password-btn.cancel {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.agent-password-btn.cancel:hover {
+    background: #e2e8f0;
+}
+
+.agent-password-btn.confirm {
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #fff;
+}
+
+.agent-password-btn.confirm:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(167, 131, 85, 0.3);
+}
+
+.agent-password-error {
+    color: #ef4444;
+    font-size: 0.85rem;
+    margin-top: 10px;
+}
+
 
 /* Header */
 .agent-header {
@@ -2400,13 +2749,46 @@ textarea:focus {
 /* Quick Actions */
 .agent-quick-actions {
     display: flex;
-    flex-wrap: nowrap;
     overflow-x: auto;
     gap: 8px;
-    margin-bottom: 12px;
     padding-bottom: 8px;
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
+}
+
+/* AI Intent Guess Options */
+.agent-guess-options {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.agent-guess-option {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: fit-content;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.agent-guess-option:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+}
+
+.agent-guess-option:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .agent-quick-actions::-webkit-scrollbar {

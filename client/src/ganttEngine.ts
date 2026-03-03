@@ -9,6 +9,7 @@ import {
     addMinutes,
     format, differenceInMinutes
 } from 'date-fns';
+import { zhTW } from 'date-fns/locale';
 
 export type TimeScale = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 

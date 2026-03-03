@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const db = require('./db');
 const { initAgent, handleChat, clearConversation, getActiveProvider, setProvider } = require('./agent');
+const { initOperatorAgent, handleOperatorChat, handleOperatorExecute, getOperatorAuthLevel, clearOperatorConversation, getOperatorProvider, setOperatorProvider } = require('./agent-operator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -236,11 +237,56 @@ app.delete('/api/projects/:id', (req, res) => {
 });
 
 // === Stages API ===
-app.patch('/api/stages/:id', (req, res) => {
-    const { start_date, end_date } = req.body;
+app.delete('/api/stages/:id', (req, res) => {
     try {
-        const stmt = db.prepare('UPDATE stages SET start_date = ?, end_date = ? WHERE id = ?');
-        stmt.run(start_date, end_date, req.params.id);
+        db.prepare('DELETE FROM stages WHERE id = ?').run(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Stage delete error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.patch('/api/stages/:id', (req, res) => {
+    const { start_date, end_date, name } = req.body;
+    try {
+        const stage = db.prepare('SELECT project_id, start_date, end_date FROM stages WHERE id = ?').get(req.params.id);
+        if (!stage) return res.status(404).json({ error: '找不到該階段' });
+
+        let finalStart = start_date || stage.start_date;
+        let finalEnd = end_date || stage.end_date;
+
+        if (start_date || end_date) {
+            const project = db.prepare('SELECT start_date, end_date FROM projects WHERE id = ?').get(stage.project_id);
+            if (project) {
+                const projStart = new Date(project.start_date);
+                const projEnd = project.end_date ? new Date(project.end_date) : null;
+                const sStart = new Date(finalStart);
+                const sEnd = new Date(finalEnd);
+
+                if (sStart >= sEnd) {
+                    return res.status(400).json({ error: '開始時間必須早於或等於結束時間' });
+                }
+                if (sStart < projStart || (projEnd && sEnd > projEnd)) {
+                    return res.status(400).json({
+                        error: `階段時間 (${sStart.toISOString().slice(0, 10)} ~ ${sEnd.toISOString().slice(0, 10)}) 超出專案範圍 (${projStart.toISOString().slice(0, 10)} ~ ${projEnd ? projEnd.toISOString().slice(0, 10) : '未設定'})，請重新設定。`
+                    });
+                }
+            }
+        }
+
+        // Build dynamic update query based on provided fields
+        const updates = [];
+        const params = [];
+        if (start_date) { updates.push('start_date = ?'); params.push(start_date); }
+        if (end_date) { updates.push('end_date = ?'); params.push(end_date); }
+        if (name) { updates.push('name = ?'); params.push(name); }
+
+        if (updates.length > 0) {
+            params.push(req.params.id);
+            const stmt = db.prepare(`UPDATE stages SET ${updates.join(', ')} WHERE id = ?`);
+            stmt.run(...params);
+        }
         res.json({ success: true });
     } catch (err) {
         console.error('Stage update error:', err);
@@ -256,6 +302,23 @@ app.post('/api/stages', (req, res) => {
     }
 
     try {
+        const project = db.prepare('SELECT start_date, end_date FROM projects WHERE id = ?').get(project_id);
+        if (!project) return res.status(404).json({ error: '找不到該專案' });
+
+        const projStart = new Date(project.start_date);
+        const projEnd = project.end_date ? new Date(project.end_date) : null;
+        const sStart = new Date(start_date);
+        const sEnd = new Date(end_date);
+
+        if (sStart >= sEnd) {
+            return res.status(400).json({ error: '開始時間必須早於或等於結束時間' });
+        }
+        if (sStart < projStart || (projEnd && sEnd > projEnd)) {
+            return res.status(400).json({
+                error: `階段時間 (${sStart.toISOString().slice(0, 10)} ~ ${sEnd.toISOString().slice(0, 10)}) 超出專案範圍 (${projStart.toISOString().slice(0, 10)} ~ ${projEnd ? projEnd.toISOString().slice(0, 10) : '未設定'})，請重新設定。`
+            });
+        }
+
         const stmt = db.prepare('INSERT INTO stages (project_id, name, "order", start_date, end_date) VALUES (?, ?, ?, ?, ?)');
         const info = stmt.run(project_id, name, order || 0, start_date, end_date);
         res.json({ success: true, stageId: info.lastInsertRowid });
@@ -420,9 +483,14 @@ app.patch('/api/sub-tasks/:id', (req, res) => {
                 let subS = new Date(finalStart);
                 let subE = new Date(finalEnd);
 
-                if (subS < stageStart) subS = stageStart;
-                if (subE > stageEnd) subE = stageEnd;
-                if (subS >= subE) subS = new Date(subE.getTime() - 3600000);
+                if (subS < stageStart || subE > stageEnd) {
+                    return res.status(400).json({
+                        error: `子任務時間 (${subS.toISOString().slice(0, 10)} ~ ${subE.toISOString().slice(0, 10)}) 超出所屬階段允許的範圍 (${stageStart.toISOString().slice(0, 10)} ~ ${stageEnd.toISOString().slice(0, 10)})，請重新設定或先延長階段。`
+                    });
+                }
+                if (subS >= subE) {
+                    return res.status(400).json({ error: '開始時間必須早於或等於結束時間' });
+                }
 
                 finalStart = subS.toISOString();
                 finalEnd = subE.toISOString();
@@ -1294,6 +1362,7 @@ app.get('/api/projects/:id/export/pdf', (req, res) => {
 
 // === AI Agent Chat API ===
 initAgent();
+initOperatorAgent();
 
 app.get('/api/agent/provider', (req, res) => {
     res.json({ provider: getActiveProvider() });
@@ -1326,6 +1395,122 @@ app.post('/api/agent/chat', async (req, res) => {
 app.post('/api/agent/clear', (req, res) => {
     const { sessionId = 'default' } = req.body;
     clearConversation(sessionId);
+    res.json({ success: true });
+});
+
+// === Group Chat (Unified Route) ===
+// Auto-route to consultant or operator based on @mention or intent keywords
+const OPERATOR_KEYWORDS = ['新增', '刪除', '移除', '修改', '調整', '更新', '結案', '解除結案', '加入', '建立', '設定日期', '設定', '延後', '提前', '標記完成', '截止', '確認執行', '確認'];
+const CONSULTANT_KEYWORDS = ['查詢', '分析', '風險', '狀態', '目前', '報告', '建議', '工作負載', '逾期', '待辦', '如何', '為什麼', '怎麼', '嗎', '哪些', '幾個', '多少'];
+
+function detectTarget(message) {
+    const trimmed = message.trim();
+    if (trimmed.startsWith('@顧問') || trimmed.startsWith('@consultant')) return 'consultant';
+    if (trimmed.startsWith('@操作員') || trimmed.startsWith('@operator')) return 'operator';
+    // Auto-detect by keywords
+    for (const kw of OPERATOR_KEYWORDS) {
+        if (trimmed.includes(kw)) return 'operator';
+    }
+    for (const kw of CONSULTANT_KEYWORDS) {
+        if (trimmed.includes(kw)) return 'consultant';
+    }
+    return 'consultant'; // default
+}
+
+function stripMention(message) {
+    return message.replace(/^@(顧問|操作員|consultant|operator)\s*/i, '').trim();
+}
+
+app.post('/api/group-chat', async (req, res) => {
+    const { message, sessionId = 'default', target: explicitTarget, sharedContext = '' } = req.body;
+    if (!message) return res.status(400).json({ error: 'message is required' });
+
+    const target = explicitTarget || detectTarget(message);
+    const cleanMessage = stripMention(message);
+
+    // Inject today's date info
+    const now = new Date();
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    const dateInfo = `[系統資訊] 今天是 ${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}（星期${weekdays[now.getDay()]}）`;
+    const fullSharedContext = sharedContext ? `${dateInfo}\n${sharedContext}` : dateInfo;
+
+    try {
+        let result;
+        if (target === 'operator') {
+            result = await handleOperatorChat(db, `op_${sessionId}`, cleanMessage, fullSharedContext);
+        } else {
+            result = await handleChat(db, `cs_${sessionId}`, cleanMessage, fullSharedContext);
+        }
+        result.agent = target;
+        res.json(result);
+    } catch (err) {
+        console.error('Group chat error:', err);
+        res.json({ agent: target, reply: '😅 不好意思，我在處理您的請求時遇到了一些技術問題。能麻煩您再描述一次嗎？我會盡力幫忙！😊', tools_called: [] });
+    }
+});
+
+app.post('/api/group-chat/clear', (req, res) => {
+    const { sessionId = 'default' } = req.body;
+    clearConversation(`cs_${sessionId}`);
+    clearOperatorConversation(`op_${sessionId}`);
+    res.json({ success: true });
+});
+
+app.get('/api/operator/provider', (req, res) => {
+    res.json({ provider: getOperatorProvider() });
+});
+
+app.post('/api/operator/provider', (req, res) => {
+    try {
+        const { provider } = req.body;
+        if (!provider) return res.status(400).json({ error: 'provider is required' });
+        setOperatorProvider(provider);
+        res.json({ success: true, provider: getOperatorProvider() });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+app.post('/api/operator/chat', async (req, res) => {
+    const { message, sessionId = 'default' } = req.body;
+    if (!message) return res.status(400).json({ error: 'message is required' });
+
+    try {
+        const result = await handleOperatorChat(db, sessionId, message);
+        res.json(result);
+    } catch (err) {
+        console.error('Operator chat error:', err);
+        res.status(500).json({ error: '操作員 Agent 回覆失敗：' + err.message });
+    }
+});
+
+app.post('/api/operator/execute', (req, res) => {
+    const { password, action_id } = req.body;
+    if (!password || !action_id) return res.status(400).json({ error: 'password and action_id are required' });
+
+    // Check required auth level
+    const authLevel = getOperatorAuthLevel(action_id);
+    if (!authLevel) return res.status(404).json({ error: '找不到待執行操作或已過期' });
+
+    // Verify password
+    if (authLevel === 'admin') {
+        if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: '管理員密碼錯誤' });
+    } else {
+        if (password !== EDIT_PASSWORD && password !== ADMIN_PASSWORD) return res.status(401).json({ error: '編輯密碼錯誤' });
+    }
+
+    try {
+        const result = handleOperatorExecute(db, action_id);
+        res.json(result);
+    } catch (err) {
+        console.error('Operator execute error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/operator/clear', (req, res) => {
+    const { sessionId = 'default' } = req.body;
+    clearOperatorConversation(sessionId);
     res.json({ success: true });
 });
 

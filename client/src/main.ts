@@ -230,6 +230,11 @@ class GanttApp {
             viewEnd = addDays(new Date(Math.max(...allEnds)), 3);
         }
         this.renderer.render(items, viewStart, viewEnd);
+
+        // 渲染完成後，利用 setTimeout 確保 DOM 已更新，然後自動滾動至今日
+        setTimeout(() => {
+            this.renderer.scrollToToday(viewStart);
+        }, 50);
     }
 
     getCurrentGanttItems(): GanttItem[] {
@@ -257,7 +262,8 @@ class GanttApp {
 
                 items.push({
                     id: task.id, name: task.name,
-                    startDate: new Date(task.start_date), endDate: new Date(task.end_date),
+                    startDate: task.start_date ? new Date(task.start_date) : new Date(),
+                    endDate: task.end_date ? new Date(task.end_date) : new Date(),
                     progress: task.status === 'completed' ? 100 : 0,
                     status: task.status, type: 'task',
                     projectId, stageId,
@@ -272,14 +278,24 @@ class GanttApp {
         };
 
         [...this.allProjectsData]
-            .sort((a, b) => new Date(a.end_date).getTime() - new Date(b.end_date).getTime())
+            .sort((a, b) => {
+                const aEnd = a.end_date ? new Date(a.end_date).getTime() : 0;
+                const bEnd = b.end_date ? new Date(b.end_date).getTime() : 0;
+                return aEnd - bEnd;
+            })
             .filter(p => this.currentProjectId === null || p.id === this.currentProjectId)
             .forEach(project => {
                 const stages = project.stages || [];
                 let totalTasks = 0, completedTasks = 0;
                 stages.forEach((s: any) => { const c = countTasks(s.tasks || []); totalTasks += c.total; completedTasks += c.completed; });
                 const projectCompleted = totalTasks > 0 && completedTasks === totalTasks;
-                const allDates = stages.flatMap((s: any) => [new Date(s.start_date).getTime(), new Date(s.end_date).getTime()]);
+
+                // Filter out invalid/empty dates and dates before year 2000 (timestamp < 946684800000)
+                const allDates = stages.flatMap((s: any) => [
+                    s.start_date ? new Date(s.start_date).getTime() : NaN,
+                    s.end_date ? new Date(s.end_date).getTime() : NaN
+                ]).filter((t: number) => !isNaN(t) && t > 946684800000);
+
                 const projStart = allDates.length > 0 ? new Date(Math.min(...allDates)) : new Date();
                 const projEnd = allDates.length > 0 ? new Date(Math.max(...allDates)) : addDays(new Date(), 30);
 
@@ -298,7 +314,8 @@ class GanttApp {
 
                     items.push({
                         id: stage.id, name: stage.name,
-                        startDate: new Date(stage.start_date), endDate: new Date(stage.end_date),
+                        startDate: stage.start_date ? new Date(stage.start_date) : new Date(),
+                        endDate: stage.end_date ? new Date(stage.end_date) : new Date(),
                         progress: stageCounts.total > 0 ? Math.round((stageCounts.completed / stageCounts.total) * 100) : 0,
                         stageCompleted, type: 'stage',
                         color: 'var(--accent)', projectId: project.id,
@@ -464,13 +481,17 @@ class GanttApp {
             });
         });
 
-        // Gantt row click (collapse, add, edit)
-        document.getElementById('gantt-rows')?.addEventListener('click', (e) => {
+        // Gantt row click (collapse, add, edit) — delegate on stable #gantt-chart (not #gantt-rows which gets replaced)
+        document.getElementById('gantt-chart')?.addEventListener('click', (e) => {
             const target = e.target as HTMLElement;
 
-            if (target.dataset.toggleProject) { this.renderer.toggleProject(parseInt(target.dataset.toggleProject)); this.refreshGantt(); return; }
-            if (target.dataset.toggleStage) { this.renderer.toggleStage(parseInt(target.dataset.toggleStage)); this.refreshGantt(); return; }
-            if (target.dataset.toggleTask) { this.renderer.toggleTask(parseInt(target.dataset.toggleTask)); this.refreshGantt(); return; }
+            // Collapse toggle - check both the target and its closest collapse-btn
+            const collapseBtn = target.closest('.collapse-btn') as HTMLElement;
+            if (collapseBtn) {
+                if (collapseBtn.dataset.toggleProject) { this.renderer.toggleProject(parseInt(collapseBtn.dataset.toggleProject)); this.refreshGantt(); return; }
+                if (collapseBtn.dataset.toggleStage) { this.renderer.toggleStage(parseInt(collapseBtn.dataset.toggleStage)); this.refreshGantt(); return; }
+                if (collapseBtn.dataset.toggleTask) { this.renderer.toggleTask(parseInt(collapseBtn.dataset.toggleTask)); this.refreshGantt(); return; }
+            }
 
             if (target.classList.contains('add-sub-btn')) {
                 if (!this.isEditMode) return;
@@ -520,8 +541,8 @@ class GanttApp {
             }
         });
 
-        // Sub-task completion checkbox
-        document.getElementById('gantt-rows')?.addEventListener('change', async (e) => {
+        // Sub-task completion checkbox — also delegate on #gantt-chart
+        document.getElementById('gantt-chart')?.addEventListener('change', async (e) => {
             const target = e.target as HTMLInputElement;
             if (target.classList.contains('task-checkbox')) {
                 const taskId = parseInt(target.dataset.taskId!);

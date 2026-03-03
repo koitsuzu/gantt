@@ -285,4 +285,14 @@ export class GanttRenderer {
             this.expandAll();
         }
     }
+
+    scrollToToday(viewStart: Date) {
+        const today = new Date();
+        const todayPos = this.engine.getPosition(today, viewStart);
+        if (todayPos >= 0) {
+            // 中心對齊：減去容器一半寬度，並稍微往左留一點空間 (例如 100px)
+            const scrollX = Math.max(0, todayPos - (this.container.clientWidth / 2) + 100);
+            this.container.scrollTo({ left: scrollX, behavior: 'smooth' });
+        }
+    }
 }
