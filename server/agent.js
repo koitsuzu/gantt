@@ -552,6 +552,8 @@ const TOOL_MAP = {
 // ─── Chat Handlers ─────────────────────────────────────────────
 const geminiConversations = new Map();
 const groqConversations = new Map();
+const geminiSummaries = new Map();
+const groqSummaries = new Map();
 
 async function handleGeminiChat(db, sessionId, userMessage, sharedContext = '') {
     if (!geminiModel) return { reply: '⚠️ Gemini 設定缺失', tools_called: [] };
@@ -560,8 +562,11 @@ async function handleGeminiChat(db, sessionId, userMessage, sharedContext = '') 
     const history = geminiConversations.get(sessionId);
     const chat = geminiModel.startChat({ history });
 
-    // Inject shared context from group chat
-    const fullMessage = sharedContext ? `${sharedContext}\n\n使用者訊息：${userMessage}` : userMessage;
+    // Inject shared context & long-term summary
+    const summary = geminiSummaries.get(sessionId);
+    const contextPrefix = (summary ? `[長期記憶摘要]\n${summary}\n\n` : '') +
+        (sharedContext ? `[臨時群組上下文]\n${sharedContext}\n\n` : '');
+    const fullMessage = contextPrefix ? `${contextPrefix}使用者訊息：${userMessage}` : userMessage;
 
     const toolsCalled = [];
     let response = await chat.sendMessage(fullMessage);
@@ -592,7 +597,27 @@ async function handleGeminiChat(db, sessionId, userMessage, sharedContext = '') 
     const reply = response.response.text() || '🤔 無法生成回覆，請再試一次。';
 
     const updatedHistory = await chat.getHistory();
-    geminiConversations.set(sessionId, updatedHistory.length > 40 ? updatedHistory.slice(-40) : updatedHistory);
+    // Context Isolation: 剝離臨時 injected 的 sharedContext，不存入長期記憶
+    if (contextPrefix) {
+        const lastUserMsg = [...updatedHistory].reverse().find(m => m.role === 'user');
+        if (lastUserMsg && lastUserMsg.parts[0].text.includes(contextPrefix.trim())) {
+            // Just keeping the user message without prefixes
+            lastUserMsg.parts[0].text = userMessage;
+        }
+    }
+
+    // Prune & Summarize Background
+    if (updatedHistory.length > 15) {
+        const pruned = updatedHistory.slice(0, updatedHistory.length - 15);
+        const prunedText = pruned.map(m => `${m.role}: ${m.parts.map(p => p.text).join(' ')}`).join('\n').slice(0, 3000); // 避免過長
+        const { summarizeConversationContext } = require('./agent-leader');
+        summarizeConversationContext(prunedText, geminiSummaries.get(sessionId)).then(newSummary => {
+            if (newSummary) geminiSummaries.set(sessionId, newSummary);
+        });
+        geminiConversations.set(sessionId, updatedHistory.slice(-15));
+    } else {
+        geminiConversations.set(sessionId, updatedHistory);
+    }
 
     return { reply, tools_called: toolsCalled };
 }
@@ -603,10 +628,14 @@ async function handleGroqChat(db, sessionId, userMessage, sharedContext = '') {
         groqConversations.set(sessionId, [{ role: 'system', content: SYSTEM_PROMPT }]);
     }
 
-    // Inject shared context from group chat
-    const fullMessage = sharedContext ? `${sharedContext}\n\n使用者訊息：${userMessage}` : userMessage;
+    // Inject shared context & long-term summary
+    const summary = groqSummaries.get(sessionId);
+    const contextPrefix = (summary ? `[長期記憶摘要]\n${summary}\n\n` : '') +
+        (sharedContext ? `[臨時群組上下文]\n${sharedContext}\n\n` : '');
+    const fullMessage = contextPrefix ? `${contextPrefix}使用者訊息：${userMessage}` : userMessage;
 
     const messages = groqConversations.get(sessionId);
+    const userMsgIndex = messages.length;
     messages.push({ role: 'user', content: fullMessage });
 
     const toolsCalled = [];
@@ -666,13 +695,26 @@ async function handleGroqChat(db, sessionId, userMessage, sharedContext = '') {
         }
     }
 
+    // Context Isolation: 剝離臨時 injected 的 sharedContext，不存入長期記憶
+    if (contextPrefix && messages[userMsgIndex] && messages[userMsgIndex].role === 'user') {
+        messages[userMsgIndex].content = userMessage;
+    }
+
     const reply = messages[messages.length - 1].content || '🤔 無法生成回覆，請再試一次。';
 
-    // Prune history if too long to save context limits
-    if (messages.length > 40) {
-        const systemMsg = messages[0];
-        const recentHistory = messages.slice(-39);
-        groqConversations.set(sessionId, [systemMsg, ...recentHistory]);
+    // Prune history & Summarize Background
+    if (messages.length > 15) {
+        const sys = messages[0];
+        const pruned = messages.slice(1, messages.length - 14);
+        const prunedText = pruned.map(m => `${m.role}: ${m.content}`).join('\n').slice(0, 3000);
+        const { summarizeConversationContext } = require('./agent-leader');
+
+        summarizeConversationContext(prunedText, groqSummaries.get(sessionId)).then(newSummary => {
+            if (newSummary) groqSummaries.set(sessionId, newSummary);
+        });
+
+        const recentHistory = messages.slice(-14);
+        groqConversations.set(sessionId, [sys, ...recentHistory]);
     }
 
     return { reply, tools_called: toolsCalled };

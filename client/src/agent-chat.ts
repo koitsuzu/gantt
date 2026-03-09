@@ -241,13 +241,17 @@ export class AgentChat {
                     if (!newProvider) return;
                     customSelect.classList.remove('open');
                     try {
-                        // Switch both agents
-                        const [res1, res2] = await Promise.all([
+                        // Switch all three agents (consultant, operator, leader)
+                        const [res1, res2, res3] = await Promise.all([
                             fetch(`${AGENT_API}/api/agent/provider`, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ provider: newProvider })
                             }),
                             fetch(`${AGENT_API}/api/operator/provider`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ provider: newProvider })
+                            }),
+                            fetch(`${AGENT_API}/api/leader/provider`, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ provider: newProvider })
                             })
@@ -294,9 +298,8 @@ export class AgentChat {
     }
 
     // ─── Shared Context Builder ────────────────────────
-    private buildSharedContext(targetAgent: string): string {
-        // Collect last 5 messages NOT from the target agent (and not from user)
-        const otherAgent = targetAgent === 'consultant' ? 'operator' : 'consultant';
+    private buildSharedContext(): string {
+        // Collect last 5 messages for Leader Agent context
         const relevant: string[] = [];
         const roleEmoji: Record<string, string> = {
             user: '👤 使用者', consultant: '🔍 顧問', operator: '🔧 操作員',
@@ -305,33 +308,37 @@ export class AgentChat {
         // Walk backwards through messages, collect last 5 relevant
         for (let i = this.messages.length - 1; i >= 0 && relevant.length < 5; i--) {
             const msg = this.messages[i];
-            if (msg.role === otherAgent || msg.role === 'user') {
+            if (msg.role === 'user' || msg.role === 'consultant' || msg.role === 'operator') {
                 const truncated = msg.content.length > 200 ? msg.content.substring(0, 200) + '...' : msg.content;
-                relevant.unshift(`${roleEmoji[msg.role]}：${truncated}`);
+                relevant.unshift(`${roleEmoji[msg.role] || msg.role}：${truncated}`);
             }
         }
 
         if (relevant.length === 0) return '';
-        return `[群組上下文 — 最近對話]\n${relevant.join('\n')}\n---以上為其他成員的對話，請根據此上下文回覆---`;
+        return `[群組上下文 — 最近對話]\n${relevant.join('\n')}\n---以上為最近的對話紀錄，請根據此上下文理解使用者意圖---`;
     }
 
     // ─── Drag ─────────────────────────────────────────
     private initDrag() {
-        const handle = this.container.querySelector('#agent-drag-handle') as HTMLElement;
-        handle.style.cursor = 'move';
+        const panel = this.container.querySelector('#agent-panel') as HTMLElement;
+        const dragTargets = [panel]; // Whole panel is now draggable
 
-        handle.addEventListener('mousedown', (e) => {
-            if ((e.target as HTMLElement).closest('.agent-btn-icon, .agent-custom-select')) return;
-            const panel = this.container.querySelector('#agent-panel') as HTMLElement;
+        panel.addEventListener('mousedown', (e) => {
+            const target = e.target as HTMLElement;
+            // Skip drag if clicking interactive elements, their descendants, or message text (to allow selection)
+            if (target.closest('button, input, textarea, .agent-custom-select, .agent-resize-handle, .agent-mention-dropdown, .agent-msg-text, code, pre')) return;
+
             this.isDragging = true;
             this.dragOffsetX = e.clientX - panel.getBoundingClientRect().left;
             this.dragOffsetY = e.clientY - panel.getBoundingClientRect().top;
+
+            // Set global cursor during drag
+            document.body.style.cursor = 'move';
             e.preventDefault();
         });
 
         document.addEventListener('mousemove', (e) => {
             if (!this.isDragging) return;
-            const panel = this.container.querySelector('#agent-panel') as HTMLElement;
             let newLeft = e.clientX - this.dragOffsetX;
             let newTop = e.clientY - this.dragOffsetY;
             newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - panel.offsetWidth));
@@ -343,7 +350,11 @@ export class AgentChat {
         });
 
         document.addEventListener('mouseup', () => {
-            if (this.isDragging) { this.isDragging = false; this.savePosition(); }
+            if (this.isDragging) {
+                this.isDragging = false;
+                document.body.style.cursor = '';
+                this.savePosition();
+            }
         });
     }
 
@@ -450,20 +461,19 @@ export class AgentChat {
         this.isLoading = true;
         const loadingEl = this.addLoading();
 
-        // Detect target from message for shared context building
-        const target = this.detectTargetLocally(message);
-        const sharedContext = this.buildSharedContext(target);
+        // Build shared context (all recent messages for Leader Agent)
+        const sharedContext = this.buildSharedContext();
 
         try {
             const res = await fetch(`${AGENT_API}/api/group-chat`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message, sessionId: this.sessionId, target, sharedContext }),
+                body: JSON.stringify({ message, sessionId: this.sessionId, sharedContext }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error || `HTTP ${res.status}`); }
 
             const data = await res.json();
             loadingEl.remove();
-            const agentRole = data.agent === 'operator' ? 'operator' : 'consultant';
+            const agentRole = data.agent === 'operator' ? 'operator' : (data.agent === 'leader' ? 'consultant' : 'consultant');
             this.addMessage(agentRole as any, data.reply, data.tools_called?.map((t: any) => t.name));
 
             // Check if auth is required
@@ -735,7 +745,12 @@ export class AgentChat {
     }
 
     private formatContent(text: string): string {
-        let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Strip raw function call syntax that Groq/Llama sometimes leaks into text
+        let s = text.replace(/<function\([^)]*\)>[\s\S]*?<\/function>/g, '');
+        s = s.replace(/&lt;function\([^)]*\)&gt;[\s\S]*?&lt;\/function&gt;/g, '');
+        // Also clean up any leftover empty lines from removed function calls
+        s = s.replace(/\n{3,}/g, '\n\n').trim();
+        s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
         s = s.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
         s = s.replace(/`([^`]+)`/g, '<code>$1</code>');

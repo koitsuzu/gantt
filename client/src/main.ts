@@ -473,6 +473,11 @@ class GanttApp {
             this.refreshGantt();
         });
 
+        // Focus Today
+        document.getElementById('focus-today-btn')?.addEventListener('click', () => {
+            this.refreshGantt(); // refreshGantt automatically scrolls to today
+        });
+
         // Level buttons
         ['level-1-btn', 'level-2-btn', 'level-3-btn', 'level-4-btn'].forEach((id, idx) => {
             document.getElementById(id)?.addEventListener('click', () => {

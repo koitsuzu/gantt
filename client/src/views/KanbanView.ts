@@ -11,6 +11,7 @@ interface KanbanTask {
     project_name: string;
     stage_name: string;
     department: string;
+    start_date: string;
     end_date: string;
     kanban_status: string;
     status: string;
@@ -82,7 +83,10 @@ export class KanbanView {
     }
 
     private renderCard(task: KanbanTask): string {
-        const endDate = task.end_date ? task.end_date.slice(0, 10) : '';
+        const startDateString = task.start_date ? task.start_date.slice(5, 10) : '';
+        const endDateString = task.end_date ? task.end_date.slice(5, 10) : '';
+        const dateDisplay = startDateString && endDateString ? `${startDateString} ~ ${endDateString}` : (endDateString || '');
+
         const today = new Date();
         const endD = new Date(task.end_date);
         const isOverdue = endD < today && task.status !== 'completed';
@@ -98,7 +102,7 @@ export class KanbanView {
                     ${task.department ? `<span class="kanban-card-dept">${task.department}</span>` : ''}
                 </div>
                 <div class="kanban-card-footer">
-                    <span class="kanban-card-date ${isOverdue ? 'overdue' : ''}">${endDate}</span>
+                    <span class="kanban-card-date ${isOverdue ? 'overdue' : ''}">${dateDisplay}</span>
                     ${isOverdue ? `<span class="kanban-card-delay">+${diffDays}天</span>` : ''}
                 </div>
             </div>`;

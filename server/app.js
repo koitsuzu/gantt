@@ -7,6 +7,7 @@ const os = require('os');
 const db = require('./db');
 const { initAgent, handleChat, clearConversation, getActiveProvider, setProvider } = require('./agent');
 const { initOperatorAgent, handleOperatorChat, handleOperatorExecute, getOperatorAuthLevel, clearOperatorConversation, getOperatorProvider, setOperatorProvider } = require('./agent-operator');
+const { initLeaderAgent, orchestrate, getLeaderProvider, setLeaderProvider, clearLeaderConversation } = require('./agent-leader');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -572,7 +573,7 @@ app.get('/api/tasks/today/kanban', (req, res) => {
                 WHEN 'done' THEN 2
                 ELSE 3
               END,
-              st.end_date ASC
+              CASE WHEN st.kanban_status = 'todo' THEN st.start_date ELSE st.end_date END ASC
         `).all();
         res.json(tasks);
     } catch (err) {
@@ -1363,6 +1364,7 @@ app.get('/api/projects/:id/export/pdf', (req, res) => {
 // === AI Agent Chat API ===
 initAgent();
 initOperatorAgent();
+initLeaderAgent();
 
 app.get('/api/agent/provider', (req, res) => {
     res.json({ provider: getActiveProvider() });
@@ -1398,34 +1400,15 @@ app.post('/api/agent/clear', (req, res) => {
     res.json({ success: true });
 });
 
-// === Group Chat (Unified Route) ===
-// Auto-route to consultant or operator based on @mention or intent keywords
-const OPERATOR_KEYWORDS = ['新增', '刪除', '移除', '修改', '調整', '更新', '結案', '解除結案', '加入', '建立', '設定日期', '設定', '延後', '提前', '標記完成', '截止', '確認執行', '確認'];
-const CONSULTANT_KEYWORDS = ['查詢', '分析', '風險', '狀態', '目前', '報告', '建議', '工作負載', '逾期', '待辦', '如何', '為什麼', '怎麼', '嗎', '哪些', '幾個', '多少'];
-
-function detectTarget(message) {
-    const trimmed = message.trim();
-    if (trimmed.startsWith('@顧問') || trimmed.startsWith('@consultant')) return 'consultant';
-    if (trimmed.startsWith('@操作員') || trimmed.startsWith('@operator')) return 'operator';
-    // Auto-detect by keywords
-    for (const kw of OPERATOR_KEYWORDS) {
-        if (trimmed.includes(kw)) return 'operator';
-    }
-    for (const kw of CONSULTANT_KEYWORDS) {
-        if (trimmed.includes(kw)) return 'consultant';
-    }
-    return 'consultant'; // default
-}
-
+// === Group Chat (Unified Route — powered by Leader Agent) ===
 function stripMention(message) {
     return message.replace(/^@(顧問|操作員|consultant|operator)\s*/i, '').trim();
 }
 
 app.post('/api/group-chat', async (req, res) => {
-    const { message, sessionId = 'default', target: explicitTarget, sharedContext = '' } = req.body;
+    const { message, sessionId = 'default', sharedContext = '' } = req.body;
     if (!message) return res.status(400).json({ error: 'message is required' });
 
-    const target = explicitTarget || detectTarget(message);
     const cleanMessage = stripMention(message);
 
     // Inject today's date info
@@ -1435,17 +1418,15 @@ app.post('/api/group-chat', async (req, res) => {
     const fullSharedContext = sharedContext ? `${dateInfo}\n${sharedContext}` : dateInfo;
 
     try {
-        let result;
-        if (target === 'operator') {
-            result = await handleOperatorChat(db, `op_${sessionId}`, cleanMessage, fullSharedContext);
-        } else {
-            result = await handleChat(db, `cs_${sessionId}`, cleanMessage, fullSharedContext);
-        }
-        result.agent = target;
+        // Use Leader Agent to analyze intent and orchestrate
+        const result = await orchestrate(
+            db, sessionId, cleanMessage, fullSharedContext,
+            handleChat, handleOperatorChat, []
+        );
         res.json(result);
     } catch (err) {
         console.error('Group chat error:', err);
-        res.json({ agent: target, reply: '😅 不好意思，我在處理您的請求時遇到了一些技術問題。能麻煩您再描述一次嗎？我會盡力幫忙！😊', tools_called: [] });
+        res.json({ agent: 'consultant', reply: '😅 不好意思，我在處理您的請求時遇到了一些技術問題。能麻煩您再描述一次嗎？我會盡力幫忙！😊', tools_called: [] });
     }
 });
 
@@ -1453,7 +1434,24 @@ app.post('/api/group-chat/clear', (req, res) => {
     const { sessionId = 'default' } = req.body;
     clearConversation(`cs_${sessionId}`);
     clearOperatorConversation(`op_${sessionId}`);
+    clearLeaderConversation(sessionId);
     res.json({ success: true });
+});
+
+// === Leader Agent Provider API ===
+app.get('/api/leader/provider', (req, res) => {
+    res.json({ provider: getLeaderProvider() });
+});
+
+app.post('/api/leader/provider', (req, res) => {
+    try {
+        const { provider } = req.body;
+        if (!provider) return res.status(400).json({ error: 'provider is required' });
+        setLeaderProvider(provider);
+        res.json({ success: true, provider: getLeaderProvider() });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 app.get('/api/operator/provider', (req, res) => {
@@ -1488,20 +1486,41 @@ app.post('/api/operator/execute', (req, res) => {
     const { password, action_id } = req.body;
     if (!password || !action_id) return res.status(400).json({ error: 'password and action_id are required' });
 
-    // Check required auth level
-    const authLevel = getOperatorAuthLevel(action_id);
-    if (!authLevel) return res.status(404).json({ error: '找不到待執行操作或已過期' });
+    // Support comma-separated action_ids for batch execution
+    const actionIds = action_id.split(',').map(id => id.trim()).filter(Boolean);
+    if (actionIds.length === 0) return res.status(400).json({ error: 'No valid action_id provided' });
 
-    // Verify password
-    if (authLevel === 'admin') {
+    // Determine the highest required auth level across all actions
+    let highestAuth = 'edit';
+    for (const aid of actionIds) {
+        const level = getOperatorAuthLevel(aid);
+        if (!level) return res.status(404).json({ error: `找不到待執行操作 (${aid}) 或已過期` });
+        if (level === 'admin') highestAuth = 'admin';
+    }
+
+    // Verify password once using highest auth level
+    if (highestAuth === 'admin') {
         if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: '管理員密碼錯誤' });
     } else {
         if (password !== EDIT_PASSWORD && password !== ADMIN_PASSWORD) return res.status(401).json({ error: '編輯密碼錯誤' });
     }
 
     try {
-        const result = handleOperatorExecute(db, action_id);
-        res.json(result);
+        // Execute all pending actions
+        const results = [];
+        for (const aid of actionIds) {
+            const result = handleOperatorExecute(db, aid);
+            results.push(result);
+        }
+
+        // Aggregate results
+        const allSuccess = results.every(r => r.success);
+        const messages = results.map(r => r.message || r.error).join('\n');
+        res.json({
+            success: allSuccess,
+            message: messages,
+            details: results,
+        });
     } catch (err) {
         console.error('Operator execute error:', err);
         res.status(500).json({ error: err.message });

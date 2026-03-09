@@ -21,6 +21,39 @@
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html {
+    font-size: 100%;
+    /* Base for rem scaling */
+}
+
+.global-font-scaling {
+    display: flex;
+    gap: 4px;
+    margin-right: 8px;
+    background: #f4f4f5;
+    padding: 2px;
+    border-radius: var(--radius);
+}
+
+.global-font-scaling .btn-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s var(--ease);
+}
+
+.global-font-scaling .btn-icon:hover {
+    background: var(--white);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+}
+
 /* === Reset & Base === */
 *,
 *::before,
@@ -1035,7 +1068,8 @@ body.resizing {
     min-width: var(--label-width);
     max-width: var(--label-width);
     padding: 0 0.8rem;
-    background: inherit;
+    background-color: var(--white);
+    /* Ensure opaque background */
     height: 100%;
     display: flex;
     align-items: center;
@@ -1045,9 +1079,10 @@ body.resizing {
     font-weight: 600;
     position: sticky;
     left: 0;
-    z-index: 10;
+    z-index: 15;
+    /* Elevated z-index to stay above gantt-bars */
     overflow: hidden;
-    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+    box-shadow: 4px 0 8px rgba(0, 0, 0, 0.04);
 }
 
 .row-name {
@@ -1194,6 +1229,8 @@ body.resizing {
 }
 
 .row-project .row-label {
+    background-color: #f8f7f5;
+    /* Match project row bg */
     font-weight: 700;
     font-size: 0.92rem;
     color: #1e293b;
@@ -1201,6 +1238,8 @@ body.resizing {
 
 /* Stage row label */
 .row-stage .row-label {
+    background-color: #fdfcfb;
+    /* Match stage row bg */
     padding-left: 1.4rem;
     font-size: 0.95rem;
     font-weight: 600;

@@ -96,6 +96,13 @@ add_project, add_stage, add_sub_task, update_task, update_stage, close_project, 
 **只有當使用者明確發送「確認」、「OK」、「好」、「執行」等確認詞時**，才呼叫對應的 CUD 工具。
 呼叫工具後，系統會自動要求密碼驗證。
 
+### 🔄 批量修改規則（!!重要!!）
+當使用者的操作涉及**多個層級**（例如同時修改階段日期和子任務日期），你**必須在確認後逐一呼叫所有需要的工具，不要遺漏任何一個**。
+- 例如：修改「結案階段」的日期 + 修改「出貨」任務的日期 → 先呼叫 update_stage，再呼叫 update_task。
+- **不要害怕日期邊界衝突**：後端資料庫會安全處理所有修改，不會因為中間狀態而失敗。
+- **絕對不要**因為「子任務目前超出階段範圍」而拒絕呼叫工具。輸出的結果會是正確的。
+- 必須把使用者要求的所有變更**全部執行完**，不要拆成多次確認或跳過任何一項。
+
 ## 行為準則
 1. 繁體中文回覆，語氣專業但親切
 2. 你**不做分析建議**，那是顧問 Agent 的職責
@@ -107,7 +114,8 @@ add_project, add_stage, add_sub_task, update_task, update_stage, close_project, 
 8. 你**只能使用以下工具**，不要嘗試呼叫任何其他工具：
    查詢：query_projects、query_project_detail、query_departments
    執行：add_project、add_stage、add_sub_task、update_task、update_stage、close_project、reopen_project、delete_project、delete_stage、delete_task
-9. 如果遇到不確定的資訊（如日期、部門），直接詢問使用者，不要猜測`;
+9. 如果遇到不確定的資訊（如日期、部門），直接詢問使用者，不要猜測
+10. 使用者確認後，你**必須一次性呼叫所有需要的工具**，不可拆分或遺漏`;
 
 
 // ─── Tool Declarations ───────────────────────────────────
@@ -351,6 +359,17 @@ function executeQueryDepartments(db) {
 
 // ─── CUD Implementations ──────────────────────────────────
 
+// Helper to securely find target by name (exact first, then shortest includes)
+function findBestMatch(list, queryName) {
+    if (!queryName) return null;
+    const exact = list.find(item => item.name === queryName);
+    if (exact) return exact;
+    const matches = list.filter(item => item.name.includes(queryName) || queryName.includes(item.name));
+    if (matches.length === 0) return null;
+    // Return the one with the shortest name to avoid "發包" matching "關模系統發包" when both exist
+    return matches.reduce((prev, curr) => prev.name.length < curr.name.length ? prev : curr);
+}
+
 function executeAddProject(db, args) {
     const { name, start_date, end_date, stages = [] } = args;
     // Use default userId = 1
@@ -380,7 +399,7 @@ function executeAddProject(db, args) {
 function executeAddStage(db, args) {
     const { project_name, stage_name, start_date, end_date } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     // Date validation
@@ -409,11 +428,11 @@ function executeAddStage(db, args) {
 function executeAddSubTask(db, args) {
     const { project_name, stage_name, task_name, department = '', start_date, end_date } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     const stages = db.prepare('SELECT * FROM stages WHERE project_id = ?').all(match.id);
-    const stage = stages.find(s => s.name.includes(stage_name) || stage_name.includes(s.name));
+    const stage = findBestMatch(stages, stage_name);
     if (!stage) return { error: `找不到專案「${match.name}」中的階段「${stage_name}」` };
 
     // Date validation
@@ -439,16 +458,17 @@ function executeAddSubTask(db, args) {
 function executeUpdateTask(db, args) {
     const { project_name, task_name, new_start_date, new_end_date, new_status } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     const stages = db.prepare('SELECT * FROM stages WHERE project_id = ?').all(match.id);
     let targetTask = null;
+    let allTasks = [];
     for (const stage of stages) {
         const tasks = db.prepare('SELECT * FROM sub_tasks WHERE stage_id = ?').all(stage.id);
-        targetTask = tasks.find(t => t.name.includes(task_name) || task_name.includes(t.name));
-        if (targetTask) break;
+        allTasks = allTasks.concat(tasks);
     }
+    targetTask = findBestMatch(allTasks, task_name);
     if (!targetTask) return { error: `找不到任務「${task_name}」` };
 
     const updates = [];
@@ -475,11 +495,11 @@ function executeUpdateTask(db, args) {
 function executeUpdateStage(db, args) {
     const { project_name, stage_name, new_start_date, new_end_date } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     const stages = db.prepare('SELECT * FROM stages WHERE project_id = ?').all(match.id);
-    const stage = stages.find(s => s.name.includes(stage_name) || stage_name.includes(s.name));
+    const stage = findBestMatch(stages, stage_name);
     if (!stage) return { error: `找不到階段「${stage_name}」` };
 
     const updates = [];
@@ -496,7 +516,7 @@ function executeUpdateStage(db, args) {
 function executeCloseProject(db, args) {
     const { project_name } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     db.prepare("UPDATE projects SET status = 'closed' WHERE id = ?").run(match.id);
@@ -506,7 +526,7 @@ function executeCloseProject(db, args) {
 function executeReopenProject(db, args) {
     const { project_name } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     db.prepare("UPDATE projects SET status = 'active' WHERE id = ?").run(match.id);
@@ -516,7 +536,7 @@ function executeReopenProject(db, args) {
 function executeDeleteProject(db, args) {
     const { project_name } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     db.transaction(() => {
@@ -534,11 +554,11 @@ function executeDeleteProject(db, args) {
 function executeDeleteStage(db, args) {
     const { project_name, stage_name } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     const stages = db.prepare('SELECT * FROM stages WHERE project_id = ?').all(match.id);
-    const targetStage = stages.find(s => s.name.includes(stage_name) || stage_name.includes(s.name));
+    const targetStage = findBestMatch(stages, stage_name);
     if (!targetStage) return { error: `找不到階段「${stage_name}」` };
 
     db.transaction(() => {
@@ -551,16 +571,17 @@ function executeDeleteStage(db, args) {
 function executeDeleteTask(db, args) {
     const { project_name, task_name } = args;
     const projects = db.prepare('SELECT * FROM projects').all();
-    const match = projects.find(p => p.name.includes(project_name) || project_name.includes(p.name));
+    const match = findBestMatch(projects, project_name);
     if (!match) return { error: `找不到專案「${project_name}」` };
 
     const stages = db.prepare('SELECT * FROM stages WHERE project_id = ?').all(match.id);
     let targetTask = null;
+    let allTasks = [];
     for (const stage of stages) {
         const tasks = db.prepare('SELECT * FROM sub_tasks WHERE stage_id = ?').all(stage.id);
-        targetTask = tasks.find(t => t.name.includes(task_name) || task_name.includes(t.name));
-        if (targetTask) break;
+        allTasks = allTasks.concat(tasks);
     }
+    targetTask = findBestMatch(allTasks, task_name);
     if (!targetTask) return { error: `找不到任務「${task_name}」` };
 
     db.prepare('DELETE FROM sub_tasks WHERE id = ?').run(targetTask.id);
@@ -598,6 +619,8 @@ const ADMIN_TOOLS = new Set(['delete_project', 'reopen_project']);
 // ─── Chat Handlers ──────────────────────────────────────────
 const operatorGeminiConvos = new Map();
 const operatorGroqConvos = new Map();
+const operatorGeminiSummaries = new Map();
+const operatorGroqSummaries = new Map();
 
 // Pending actions waiting for auth
 const pendingActions = new Map();
@@ -609,8 +632,11 @@ async function handleOperatorGeminiChat(db, sessionId, userMessage, sharedContex
     const history = operatorGeminiConvos.get(sessionId);
     const chat = operatorGeminiModel.startChat({ history });
 
-    // Inject shared context from group chat
-    const fullMessage = sharedContext ? `${sharedContext}\n\n使用者訊息：${userMessage}` : userMessage;
+    // Inject shared context & long-term summary
+    const summary = operatorGeminiSummaries.get(sessionId);
+    const contextPrefix = (summary ? `[長期記憶摘要]\n${summary}\n\n` : '') +
+        (sharedContext ? `[臨時群組上下文]\n${sharedContext}\n\n` : '');
+    const fullMessage = contextPrefix ? `${contextPrefix}使用者訊息：${userMessage}` : userMessage;
 
     const toolsCalled = [];
     let response = await chat.sendMessage(fullMessage);
@@ -656,7 +682,29 @@ async function handleOperatorGeminiChat(db, sessionId, userMessage, sharedContex
 
     const reply = response.response.text() || '🤔 無法生成回覆。';
     const updatedHistory = await chat.getHistory();
-    operatorGeminiConvos.set(sessionId, updatedHistory.length > 40 ? updatedHistory.slice(-40) : updatedHistory);
+
+    // Context Isolation: 剝離臨時 injected 的 sharedContext，不存入長期記憶
+    if (contextPrefix) {
+        const lastUserMsg = [...updatedHistory].reverse().find(m => m.role === 'user');
+        if (lastUserMsg && lastUserMsg.parts[0].text.includes(contextPrefix.trim())) {
+            lastUserMsg.parts[0].text = userMessage;
+        }
+    }
+
+    // Prune history & Summarize Background
+    if (updatedHistory.length > 15) {
+        const pruned = updatedHistory.slice(0, updatedHistory.length - 15);
+        const prunedText = pruned.map(m => `${m.role}: ${m.parts.map(p => p.text).join(' ')}`).join('\n').slice(0, 3000);
+        const { summarizeConversationContext } = require('./agent-leader');
+
+        summarizeConversationContext(prunedText, operatorGeminiSummaries.get(sessionId)).then(newSummary => {
+            if (newSummary) operatorGeminiSummaries.set(sessionId, newSummary);
+        });
+
+        operatorGeminiConvos.set(sessionId, updatedHistory.slice(-15));
+    } else {
+        operatorGeminiConvos.set(sessionId, updatedHistory);
+    }
 
     // Check if reply contains auth markers
     let requires_auth = null;
@@ -667,12 +715,16 @@ async function handleOperatorGeminiChat(db, sessionId, userMessage, sharedContex
         requires_auth = 'edit';
     }
 
-    // Also check from toolsCalled
-    const pendingTool = toolsCalled.find(t => t.pending);
-    if (pendingTool) {
-        requires_auth = pendingTool.auth_level;
-        action_id = toolsCalled.find(t => t.pending)?.args ?
-            Array.from(pendingActions.entries()).find(([, v]) => v.sessionId === sessionId)?.[0] : null;
+    // Collect ALL pending action_ids for this session (supports batch updates)
+    const pendingTools = toolsCalled.filter(t => t.pending);
+    if (pendingTools.length > 0) {
+        // Use highest auth level among all pending tools
+        requires_auth = pendingTools.some(t => t.auth_level === 'admin') ? 'admin' : 'edit';
+        // Collect all action_ids for this session
+        const allActionIds = Array.from(pendingActions.entries())
+            .filter(([, v]) => v.sessionId === sessionId)
+            .map(([id]) => id);
+        action_id = allActionIds.join(',');
     }
 
     const cleanReply = reply.replace(/\[REQUIRES_AUTH:(edit|admin)\]/g, '').trim();
@@ -691,10 +743,14 @@ async function handleOperatorGroqChat(db, sessionId, userMessage, sharedContext 
         operatorGroqConvos.set(sessionId, [{ role: 'system', content: OPERATOR_SYSTEM_PROMPT }]);
     }
 
-    // Inject shared context from group chat
-    const fullMessage = sharedContext ? `${sharedContext}\n\n使用者訊息：${userMessage}` : userMessage;
+    // Inject shared context & long-term summary
+    const summary = operatorGroqSummaries.get(sessionId);
+    const contextPrefix = (summary ? `[長期記憶摘要]\n${summary}\n\n` : '') +
+        (sharedContext ? `[臨時群組上下文]\n${sharedContext}\n\n` : '');
+    const fullMessage = contextPrefix ? `${contextPrefix}使用者訊息：${userMessage}` : userMessage;
 
     const messages = operatorGroqConvos.get(sessionId);
+    const userMsgIndex = messages.length;
     messages.push({ role: 'user', content: fullMessage });
     const toolsCalled = [];
     let isToolCalling = true;
@@ -705,20 +761,46 @@ async function handleOperatorGroqChat(db, sessionId, userMessage, sharedContext 
             response = await operatorGroqClient.chat.completions.create({
                 model: 'llama-3.3-70b-versatile',
                 messages, tools: GROQ_OPERATOR_TOOLS,
-                tool_choice: "auto", max_tokens: 4096
+                tool_choice: "auto", max_tokens: 4096,
+                parallel_tool_calls: false, // Groq/Llama struggles with parallel calls
             });
         } catch (err) {
-            console.error('🔧 [Operator/Groq] API Error:', err.message || err);
-            // Extract any tool error from previous messages for warm guidance
-            const lastToolMsg = [...messages].reverse().find(m => m.role === 'tool');
-            let toolError = '';
-            if (lastToolMsg) {
-                try { const parsed = JSON.parse(lastToolMsg.content); if (parsed.error) toolError = parsed.error; } catch { }
+            const errMsg = err.message || String(err);
+            console.error('🔧 [Operator/Groq] API Error:', errMsg);
+
+            // Retry once without tools if it's a function call format error
+            if (errMsg.includes('Failed to call a function') || errMsg.includes('failed_generation')) {
+                console.log('🔧 [Operator/Groq] Retrying without tool_choice...');
+                try {
+                    // Add a hint to help the model
+                    messages.push({ role: 'user', content: '（系統提示：請直接呼叫工具執行操作，一次一個工具即可。）' });
+                    const retryResponse = await operatorGroqClient.chat.completions.create({
+                        model: 'llama-3.3-70b-versatile',
+                        messages, tools: GROQ_OPERATOR_TOOLS,
+                        tool_choice: "auto", max_tokens: 4096,
+                        parallel_tool_calls: false,
+                    });
+                    // Remove the hint message
+                    messages.pop();
+                    response = retryResponse;
+                } catch (retryErr) {
+                    console.error('🔧 [Operator/Groq] Retry also failed:', retryErr.message || retryErr);
+                    messages.pop(); // Clean up hint
+                }
             }
-            const warmReply = toolError
-                ? `😅 哎呀，操作遇到了一點問題：\n\n⚠️ ${toolError}\n\n需要我幫您調整嗎？您可以告訴我新的日期或其他修改方式 😊`
-                : '😅 不好意思，我在處理這個操作時遇到了一些技術問題。能麻煩您再描述一次嗎？我會盡力幫您完成！😊';
-            return { reply: warmReply, tools_called: toolsCalled };
+
+            if (!response) {
+                // Extract any tool error from previous messages for warm guidance
+                const lastToolMsg = [...messages].reverse().find(m => m.role === 'tool');
+                let toolError = '';
+                if (lastToolMsg) {
+                    try { const parsed = JSON.parse(lastToolMsg.content); if (parsed.error) toolError = parsed.error; } catch { }
+                }
+                const warmReply = toolError
+                    ? `😅 哎呀，操作遇到了一點問題：\n\n⚠️ ${toolError}\n\n需要我幫您調整嗎？您可以告訴我新的日期或其他修改方式 😊`
+                    : '😅 不好意思，我在處理這個操作時遇到了一些技術問題。能麻煩您再說一次「確認」嗎？我會盡力幫您完成！😊';
+                return { reply: warmReply, tools_called: toolsCalled };
+            }
         }
 
         const responseMessage = response.choices[0].message;
@@ -758,18 +840,36 @@ async function handleOperatorGroqChat(db, sessionId, userMessage, sharedContext 
         }
     }
 
+    // Context Isolation: 剝離臨時 injected 的 sharedContext，不存入長期記憶
+    if (contextPrefix && messages[userMsgIndex] && messages[userMsgIndex].role === 'user') {
+        messages[userMsgIndex].content = userMessage;
+    }
+
     const reply = messages[messages.length - 1].content || '🤔 無法生成回覆。';
-    if (messages.length > 40) {
+
+    // Prune history & Summarize Background
+    if (messages.length > 15) {
         const sys = messages[0];
-        operatorGroqConvos.set(sessionId, [sys, ...messages.slice(-39)]);
+        const pruned = messages.slice(1, messages.length - 14);
+        const prunedText = pruned.map(m => `${m.role}: ${m.content}`).join('\n').slice(0, 3000);
+        const { summarizeConversationContext } = require('./agent-leader');
+
+        summarizeConversationContext(prunedText, operatorGroqSummaries.get(sessionId)).then(newSummary => {
+            if (newSummary) operatorGroqSummaries.set(sessionId, newSummary);
+        });
+
+        operatorGroqConvos.set(sessionId, [sys, ...messages.slice(-14)]);
     }
 
     let requires_auth = null;
     let action_id = null;
-    const pendingTool = toolsCalled.find(t => t.pending);
-    if (pendingTool) {
-        requires_auth = pendingTool.auth_level;
-        action_id = Array.from(pendingActions.entries()).find(([, v]) => v.sessionId === sessionId)?.[0];
+    const pendingTools = toolsCalled.filter(t => t.pending);
+    if (pendingTools.length > 0) {
+        requires_auth = pendingTools.some(t => t.auth_level === 'admin') ? 'admin' : 'edit';
+        const allActionIds = Array.from(pendingActions.entries())
+            .filter(([, v]) => v.sessionId === sessionId)
+            .map(([id]) => id);
+        action_id = allActionIds.join(',');
     }
     if (reply.includes('[REQUIRES_AUTH:admin]')) requires_auth = 'admin';
     else if (reply.includes('[REQUIRES_AUTH:edit]')) requires_auth = 'edit';
