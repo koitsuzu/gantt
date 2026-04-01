@@ -1,0 +1,26 @@
+schema: spec-driven
+
+# 項目背景
+# 此內容將在建立各項規範時顯示給 AI，幫助其理解系統行為。
+context: |
+  技術堆疊：
+  - 前端：Vite, TypeScript, Vanilla CSS, date-fns (日期處理)。
+  - 後端：Node.js, Express, better-sqlite3 (SQLite 資料庫)。
+  - 容器化：Docker & Docker Compose 一鍵部署。
+  領域：精準專案管理甘特圖系統。
+
+核心邏輯約束：
+- 專案 (Project) > 階段 (Stage) > 子任務 (Sub-task) 的三層結構。
+- 時間軸級聯：階段必須在專案範圍內，任務必須在階段/父任務範圍內。
+- 狀態級聯：當子任務全數完成，父項自動標記為完成。
+- 色標邏輯：任務根據部門 (Department) 的自訂顏色自動著色。
+
+# 規範規則 (可選)
+rules:
+  proposal:
+    - 保持提議簡潔，專注於「為什麼」和「變更了什麼」。
+  specs:
+    - 必須包含 Requirement 與 Scenario (WHEN/THEN) 格式。
+    - 每個 Capability 的 spec 應保持原子性。
+  tasks:
+    - 任務清單應包含具體的文件路徑和邏輯變更點。
